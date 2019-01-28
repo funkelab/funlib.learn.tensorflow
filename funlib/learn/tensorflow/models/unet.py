@@ -1,4 +1,5 @@
 import tensorflow as tf
+from .conv4d import conv4d
 
 
 def conv_pass(
@@ -22,8 +23,8 @@ def conv_pass(
 
         f_in:
 
-            The input tensor of shape ``(batch_size, channels, depth, height,
-            width)``.
+            The input tensor of shape ``(batch_size, channels, [length,] depth,
+            height, width)``.
 
         kernel_sizes:
 
@@ -73,7 +74,17 @@ def conv_pass(
             for f, k, vs
             in zip(fov, kernel_size, voxel_size)
         )
-        fmaps = tf.layers.conv3d(
+
+        in_shape = tuple(fmaps.get_shape().as_list())
+        if len(in_shape) == 6:
+            conv_op = conv4d
+        elif len(in_shape) == 5:
+            conv_op = tf.layers.conv3d
+        else:
+            raise RuntimeError(
+                "Input tensor of shape %s not supported" % (in_shape,))
+
+        fmaps = conv_op(
             inputs=fmaps,
             filters=num_fmaps,
             kernel_size=kernel_size,
@@ -81,6 +92,15 @@ def conv_pass(
             data_format='channels_first',
             activation=activation,
             name=name + '_%i' % i)
+
+        out_shape = tuple(fmaps.get_shape().as_list())
+
+        # eliminate t dimension if length is 1
+        if len(out_shape) == 6:
+            length = out_shape[2]
+            if length == 1:
+                out_shape = out_shape[0:2] + out_shape[3:]
+                fmaps = tf.reshape(fmaps, out_shape)
 
     return fmaps, fov
 
@@ -92,6 +112,19 @@ def downsample(
         voxel_size=(1, 1, 1)):
 
     voxel_size = tuple(vs*fac for vs, fac in zip(voxel_size, factors))
+    in_shape = fmaps_in.get_shape().as_list()
+    is_4d = len(in_shape) == 6
+
+    if is_4d:
+
+        # store time dimension in channels
+        fmaps_in = tf.reshape(fmaps_in, (
+            in_shape[0],
+            in_shape[1]*in_shape[2],
+            in_shape[3],
+            in_shape[4],
+            in_shape[5]))
+
     fmaps = tf.layers.max_pooling3d(
         fmaps_in,
         pool_size=factors,
@@ -99,6 +132,19 @@ def downsample(
         padding='valid',
         data_format='channels_first',
         name=name)
+
+    if is_4d:
+
+        out_shape = fmaps.get_shape().as_list()
+
+        # restore time dimension
+        fmaps = tf.reshape(fmaps, (
+            in_shape[0],
+            in_shape[1],
+            in_shape[2],
+            out_shape[2],
+            out_shape[3],
+            out_shape[4]))
 
     return fmaps, voxel_size
 
@@ -128,38 +174,70 @@ def upsample(
     return fmaps, voxel_size
 
 
-def crop_zyx(fmaps_in, shape):
-    '''Crop only the spatial dimensions to match shape.
+def crop(fmaps_in, shape):
+    '''Crop spatial and time dimensions to match shape.
 
     Args:
 
         fmaps_in:
 
-            The input tensor.
+            The input tensor of shape ``(b, c, z, y, x)`` (for 3D) or ``(b, c,
+            t, z, y, x)`` (for 4D).
 
         shape:
 
-            A list (not a tensor) with the requested shape [_, _, z, y, x].
+            A list (not a tensor) with the requested shape ``[_, _, z, y, x]``
+            (for 3D) or ``[_, _, t, z, y, x]`` (for 4D).
     '''
 
     in_shape = fmaps_in.get_shape().as_list()
 
-    offset = [
-        0,  # batch
-        0,  # channel
-        (in_shape[2] - shape[2])//2,  # z
-        (in_shape[3] - shape[3])//2,  # y
-        (in_shape[4] - shape[4])//2,  # x
-    ]
-    size = [
-        in_shape[0],
-        in_shape[1],
-        shape[2],
-        shape[3],
-        shape[4],
-    ]
+    in_is_4d = len(in_shape) == 6
+    out_is_4d = len(shape) == 6
+
+    if in_is_4d and not out_is_4d:
+        # set output shape for time to 1
+        shape = shape[0:2] + [1] + shape[2:]
+
+    if in_is_4d:
+        offset = [
+            0,  # batch
+            0,  # channel
+            (in_shape[2] - shape[2])//2,  # t
+            (in_shape[3] - shape[3])//2,  # z
+            (in_shape[4] - shape[4])//2,  # y
+            (in_shape[5] - shape[5])//2,  # x
+        ]
+        size = [
+            in_shape[0],
+            in_shape[1],
+            shape[2],
+            shape[3],
+            shape[4],
+            shape[5],
+        ]
+    else:
+        offset = [
+            0,  # batch
+            0,  # channel
+            (in_shape[2] - shape[2])//2,  # z
+            (in_shape[3] - shape[3])//2,  # y
+            (in_shape[4] - shape[4])//2,  # x
+        ]
+        size = [
+            in_shape[0],
+            in_shape[1],
+            shape[2],
+            shape[3],
+            shape[4],
+        ]
 
     fmaps = tf.slice(fmaps_in, offset, size)
+
+    if in_is_4d and not out_is_4d:
+        # remove time dimension
+        shape = shape[0:2] + shape[3:]
+        fmaps = tf.reshape(fmaps, shape)
 
     return fmaps
 
@@ -190,11 +268,15 @@ def unet(
     crop, and down and up arrows are max-pooling and transposed convolutions,
     respectively.
 
-    The U-Net expects tensors to have shape ``(batch=1, channels, depth,
-    height, width)``.
+    The U-Net expects 3D or 4D tensors shaped like::
+
+        ``(batch=1, channels, [length,] depth, height, width)``.
 
     This U-Net performs only "valid" convolutions, i.e., sizes of the feature
-    maps decrease after each convolution.
+    maps decrease after each convolution. It will perfrom 4D convolutions as
+    long as ``length`` is greater than 1. As soon as ``length`` is 1 due to a
+    valid convolution, the time dimension will be dropped and tensors with
+    ``(b, c, z, y, x)`` will be use (and returned) from there on.
 
     Args:
 
@@ -205,7 +287,8 @@ def unet(
         num_fmaps:
 
             The number of feature maps in the first layer. This is also the
-            number of output feature maps.
+            number of output feature maps. Stored in the ``channels``
+            dimension.
 
         fmap_inc_factors:
 
@@ -329,7 +412,7 @@ def unet(
     print(prefix + "g_out_upsampled: " + str(g_out_upsampled.shape))
 
     # copy-crop
-    f_left_cropped = crop_zyx(f_left, g_out_upsampled.get_shape().as_list())
+    f_left_cropped = crop(f_left, g_out_upsampled.get_shape().as_list())
 
     print(prefix + "f_left_cropped: " + str(f_left_cropped.shape))
 
