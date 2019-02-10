@@ -253,7 +253,8 @@ def unet(
         layer=0,
         fov=(1, 1, 1),
         voxel_size=(1, 1, 1),
-        num_fmaps_out=None):
+        num_fmaps_out=None,
+        num_heads=1):
     '''Create a U-Net::
 
         f_in --> f_left --------------------------->> f_right--> f_out
@@ -340,12 +341,16 @@ def unet(
             If given, specifies the number of output fmaps of the U-Net.
             Setting this number ensures that the upper most layer, right side
             has at least this number of fmaps.
+
+        num_heads:
+
+            Number of decoders. The resulting U-Net has one single encoder path and num_heads decoder paths.
+            This is useful in a multi-task learning context.
     '''
 
     prefix = "    "*layer
     print(prefix + "Creating U-Net layer %i" % layer)
     print(prefix + "f_in: " + str(fmaps_in.shape))
-
     if isinstance(fmap_inc_factors, int):
         fmap_inc_factors = [fmap_inc_factors]*len(downsample_factors)
 
@@ -376,6 +381,9 @@ def unet(
     if bottom_layer:
         print(prefix + "bottom layer")
         print(prefix + "f_out: " + str(f_left.shape))
+        if num_heads > 1:
+            print(prefix + "num_heads: " + str(num_heads))
+            f_left = [f_left] * num_heads
         return f_left, fov, voxel_size
 
     # downsample
@@ -386,7 +394,7 @@ def unet(
         voxel_size=voxel_size)
 
     # recursive U-net
-    g_out, fov, voxel_size = unet(
+    g_outs, fov, voxel_size = unet(
         g_in,
         num_fmaps=num_fmaps*fmap_inc_factors[layer],
         fmap_inc_factors=fmap_inc_factors,
@@ -396,43 +404,55 @@ def unet(
         activation=activation,
         layer=layer+1,
         fov=fov,
-        voxel_size=voxel_size)
+        voxel_size=voxel_size,
+        num_heads=num_heads)
+    if num_heads == 1:
+        g_outs = [g_outs]
 
-    print(prefix + "g_out: " + str(g_out.shape))
 
-    # upsample
-    g_out_upsampled, voxel_size = upsample(
-        g_out,
-        downsample_factors[layer],
-        num_fmaps,
-        activation=activation,
-        name='unet_up_%i_to_%i' % (layer + 1, layer),
-        voxel_size=voxel_size)
 
-    print(prefix + "g_out_upsampled: " + str(g_out_upsampled.shape))
+    # For Multi-Headed UNet: Create this path multiple times.
+    f_outs = []
+    for head_num, g_out in enumerate(g_outs):
+        with tf.variable_scope('decoder_%i_layer_%i' %(head_num, layer)):
+            if num_heads > 1:
+                print('head number: %i' %head_num)
+            print(prefix + "g_out: " + str(g_out.shape))
+            # upsample
+            g_out_upsampled, voxel_size = upsample(
+                g_out,
+                downsample_factors[layer],
+                num_fmaps,
+                activation=activation,
+                name='unet_up_%i_to_%i' % (layer + 1, layer),
+            voxel_size=voxel_size)
 
-    # copy-crop
-    f_left_cropped = crop(f_left, g_out_upsampled.get_shape().as_list())
+            print(prefix + "g_out_upsampled: " + str(g_out_upsampled.shape))
 
-    print(prefix + "f_left_cropped: " + str(f_left_cropped.shape))
+            # copy-crop
+            f_left_cropped = crop(f_left, g_out_upsampled.get_shape().as_list())
 
-    # concatenate along channel dimension
-    f_right = tf.concat([f_left_cropped, g_out_upsampled], 1)
+            print(prefix + "f_left_cropped: " + str(f_left_cropped.shape))
 
-    print(prefix + "f_right: " + str(f_right.shape))
+            # concatenate along channel dimension
+            f_right = tf.concat([f_left_cropped, g_out_upsampled], 1)
 
-    if layer == 0 and num_fmaps_out is not None:
-        num_fmaps = max(num_fmaps_out, num_fmaps)
+            print(prefix + "f_right: " + str(f_right.shape))
 
-    # convolve
-    f_out, fov = conv_pass(
-        f_right,
-        kernel_sizes=kernel_size_up[layer],
-        num_fmaps=num_fmaps,
-        name='unet_layer_%i_right' % layer,
-        fov=fov,
-        voxel_size=voxel_size)
+            if layer == 0 and num_fmaps_out is not None:
+                num_fmaps = max(num_fmaps_out, num_fmaps)
 
-    print(prefix + "f_out: " + str(f_out.shape))
+            # convolve
+            f_out, fov = conv_pass(
+                f_right,
+                kernel_sizes=kernel_size_up[layer],
+                num_fmaps=num_fmaps,
+                name='unet_layer_%i_right' % (layer),
+                fov=fov,
+                voxel_size=voxel_size)
 
-    return f_out, fov, voxel_size
+            print(prefix + "f_out: " + str(f_out.shape))
+            f_outs.append(f_out)
+    if num_heads == 1:
+        f_outs = f_outs[0] # Backwards compatibility.
+    return f_outs, fov, voxel_size
