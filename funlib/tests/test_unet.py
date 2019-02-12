@@ -1,6 +1,5 @@
 from funlib.learn.tensorflow import models
 import tensorflow as tf
-import unittest
 
 
 class TestUNet(tf.test.TestCase):

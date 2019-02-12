@@ -241,8 +241,9 @@ def crop(fmaps_in, shape):
 
     return fmaps
 
+
 def get_number_of_tf_variables():
-    '''Returns number of trainable variables in current tensorflow graph collection'''
+    '''Returns number of trainable variables in tensorflow graph collection'''
     total_parameters = 0
     for variable in tf.trainable_variables():
         # shape is an array of tf.Dimension
@@ -252,6 +253,7 @@ def get_number_of_tf_variables():
             variable_parameters *= dim.value
         total_parameters += variable_parameters
     return total_parameters
+
 
 def unet(
         fmaps_in,
@@ -355,8 +357,9 @@ def unet(
 
         num_heads:
 
-            Number of decoders. The resulting U-Net has one single encoder path and num_heads decoder paths.
-            This is useful in a multi-task learning context.
+            Number of decoders. The resulting U-Net has one single encoder
+            path and num_heads decoder paths. This is useful in a multi-task
+            learning context.
     '''
     num_var_start = get_number_of_tf_variables()
     prefix = "    "*layer
@@ -391,12 +394,14 @@ def unet(
     bottom_layer = (layer == len(downsample_factors))
 
     num_var_end = get_number_of_tf_variables()
+    var_added = num_var_end - num_var_start
     if bottom_layer:
         print(prefix + "bottom layer")
         print(prefix + "f_out: " + str(f_left.shape))
         if num_heads > 1:
             f_left = [f_left] * num_heads
-        print(prefix + 'number of variables added: %i, new total: %i' % (num_var_end - num_var_start, num_var_end))
+        print(prefix + 'number of variables added: %i, '
+                       'new total: %i' % (var_added, num_var_end))
         return f_left, fov, voxel_size
 
     # downsample
@@ -406,7 +411,8 @@ def unet(
         'unet_down_%i_to_%i' % (layer, layer + 1),
         voxel_size=voxel_size)
 
-    print(prefix + 'number of variables added: %i, new total: %i' % (num_var_end - num_var_start, num_var_end))
+    print(prefix + 'number of variables added: %i, '
+                   'new total: %i' % (var_added, num_var_end))
     # recursive U-net
     g_outs, fov, voxel_size = unet(
         g_in,
@@ -423,15 +429,13 @@ def unet(
     if num_heads == 1:
         g_outs = [g_outs]
 
-
-
     # For Multi-Headed UNet: Create this path multiple times.
     f_outs = []
     for head_num, g_out in enumerate(g_outs):
         num_var_start = get_number_of_tf_variables()
-        with tf.variable_scope('decoder_%i_layer_%i' %(head_num, layer)):
+        with tf.variable_scope('decoder_%i_layer_%i' % (head_num, layer)):
             if num_heads > 1:
-                print(prefix + 'head number: %i' %head_num)
+                print(prefix + 'head number: %i' % head_num)
             print(prefix + "g_out: " + str(g_out.shape))
             # upsample
             g_out_upsampled, voxel_size = upsample(
@@ -440,12 +444,13 @@ def unet(
                 num_fmaps,
                 activation=activation,
                 name='unet_up_%i_to_%i' % (layer + 1, layer),
-            voxel_size=voxel_size)
+                voxel_size=voxel_size)
 
             print(prefix + "g_out_upsampled: " + str(g_out_upsampled.shape))
 
             # copy-crop
-            f_left_cropped = crop(f_left, g_out_upsampled.get_shape().as_list())
+            f_left_cropped = crop(f_left,
+                                  g_out_upsampled.get_shape().as_list())
 
             print(prefix + "f_left_cropped: " + str(f_left_cropped.shape))
 
@@ -469,7 +474,9 @@ def unet(
             print(prefix + "f_out: " + str(f_out.shape))
             f_outs.append(f_out)
             num_var_end = get_number_of_tf_variables()
-            print(prefix + 'number of variables added: %i, new total: %i' % (num_var_end - num_var_start, num_var_end))
+            var_added = num_var_end - num_var_start
+            print(prefix + 'number of variables added: %i, '
+                           'new total: %i' % (var_added, num_var_end))
     if num_heads == 1:
-        f_outs = f_outs[0] # Backwards compatibility.
+        f_outs = f_outs[0]  # Backwards compatibility.
     return f_outs, fov, voxel_size
