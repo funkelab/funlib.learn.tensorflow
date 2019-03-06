@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 from .conv4d import conv4d
 
 
@@ -124,6 +125,9 @@ def downsample(
             in_shape[3],
             in_shape[4],
             in_shape[5]))
+
+    if not np.all(np.array(in_shape[2:])%np.array(factors)==0):
+        raise RuntimeWarning("Input shape is not evenly divisible by downsample factors.")
 
     fmaps = tf.layers.max_pooling3d(
         fmaps_in,
