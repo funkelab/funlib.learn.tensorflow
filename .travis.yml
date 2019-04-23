@@ -14,7 +14,7 @@ before_install:
   - conda info -a
   - conda create -q -n funlib python=$TRAVIS_PYTHON_VERSION
   - source activate funlib
-  - conda install tensorflow
+  - conda install -c conda-forge tensorflow mlpack
 
 install:
   - make install-dev
