@@ -4,6 +4,7 @@ import pytest
 import warnings
 warnings.filterwarnings("error")
 
+
 class TestUNet(tf.test.TestCase):
     def test_creation(self):
         with self.test_session():
@@ -23,7 +24,7 @@ class TestUNet(tf.test.TestCase):
             # Should raise warning
             fmaps = tf.placeholder(tf.float32, shape=(1, 1, 100, 80, 48))
 
-            with pytest.raises(Exception) as e_info:
+            with pytest.raises(Exception):
                 unet, _, _ = models.unet(
                     fmaps_in=fmaps,
                     num_fmaps=3,
