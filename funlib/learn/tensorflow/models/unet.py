@@ -154,27 +154,117 @@ def downsample(
     return fmaps, voxel_size
 
 
+def repeat(
+        fmaps_in,
+        multiples):
+
+    expanded = tf.expand_dims(fmaps_in, -1)
+    tiled = tf.tile(expanded, multiples=(1,) + multiples)
+    repeated = tf.reshape(tiled, tf.shape(fmaps_in) * multiples)
+
+    return repeated
+
+
 def upsample(
         fmaps_in,
         factors,
         num_fmaps,
         activation='relu',
         name='up',
-        voxel_size=(1, 1, 1)):
+        voxel_size=(1, 1, 1),
+        constant_upsample=False):
+    '''Upsample feature maps with the given factors using a transposed
+    convolution.
+
+    Args:
+
+        fmaps_in (tensor):
+
+            The input feature maps of shape `(b, c, d, h, w)`. `c` is the
+            number of channels (number of feature maps).
+
+        factors (``tuple`` of ``int``):
+
+            The spatial upsampling factors as `(f_z, f_y, f_x)`.
+
+        num_fmaps (``int``):
+
+            The number of output feature maps.
+
+        activation (``string``):
+
+            Which activation function to use.
+
+        name (``string``):
+
+            Name of the operator.
+
+        voxel_size (``tuple`` of ``int``, optional):
+
+            Voxel size of the input feature maps. Used to compute the voxel
+            size of the output.
+
+        constant_upsample (``bool``, optional):
+
+            Whether to restrict the transpose convolution kernels to be
+            constant values. This might help to reduce checker board artifacts.
+
+    Returns:
+
+        `(fmaps, voxel_size)`, with `fmaps` of shape `(b, num_fmaps, d*f_z,
+        h*f_y, w*f_x)`.
+    '''
 
     voxel_size = tuple(vs/fac for vs, fac in zip(voxel_size, factors))
     if activation is not None:
         activation = getattr(tf.nn, activation)
 
-    fmaps = tf.layers.conv3d_transpose(
-        fmaps_in,
-        filters=num_fmaps,
-        kernel_size=factors,
-        strides=factors,
-        padding='valid',
-        data_format='channels_first',
-        activation=activation,
-        name=name)
+    if constant_upsample:
+
+        in_shape = tuple(fmaps_in.get_shape().as_list())
+        num_fmaps_in = in_shape[1]
+        num_fmaps_out = num_fmaps
+        out_shape = (
+            in_shape[0],
+            num_fmaps_out) + tuple(s*f for s, f in zip(in_shape[2:], factors))
+
+        # (num_fmaps_out * num_fmaps_in)
+        kernel_variables = tf.get_variable(
+            name + '_kernel_variables',
+            (num_fmaps_out * num_fmaps_in,),
+            dtype=tf.float32)
+        # (1, 1, 1, num_fmaps_out, num_fmaps_in)
+        kernel_variables = tf.reshape(
+            kernel_variables,
+            (1, 1, 1) + (num_fmaps_out, num_fmaps_in))
+        # (f_z, f_y_ f_x, num_fmaps_out, num_fmaps_in)
+        constant_upsample_filter = repeat(
+            kernel_variables,
+            tuple(factors) + (1, 1))
+
+        fmaps = tf.nn.conv3d_transpose(
+            fmaps_in,
+            filter=constant_upsample_filter,
+            output_shape=out_shape,
+            strides=(1, 1) + tuple(factors),
+            padding='VALID',
+            data_format='NCDHW',
+            name=name)
+
+        if activation is not None:
+            fmaps = activation(fmaps)
+
+    else:
+
+        fmaps = tf.layers.conv3d_transpose(
+            fmaps_in,
+            filters=num_fmaps,
+            kernel_size=factors,
+            strides=factors,
+            padding='valid',
+            data_format='channels_first',
+            activation=activation,
+            name=name)
 
     return fmaps, voxel_size
 
@@ -272,7 +362,8 @@ def unet(
         fov=(1, 1, 1),
         voxel_size=(1, 1, 1),
         num_fmaps_out=None,
-        num_heads=1):
+        num_heads=1,
+        constant_upsample=False):
     '''Create a U-Net::
 
         f_in --> f_left --------------------------->> f_right--> f_out
@@ -430,7 +521,8 @@ def unet(
         layer=layer+1,
         fov=fov,
         voxel_size=voxel_size,
-        num_heads=num_heads)
+        num_heads=num_heads,
+        constant_upsample=constant_upsample)
     if num_heads == 1:
         g_outs = [g_outs]
 
@@ -449,7 +541,8 @@ def unet(
                 num_fmaps,
                 activation=activation,
                 name='unet_up_%i_to_%i' % (layer + 1, layer),
-                voxel_size=voxel_size)
+                voxel_size=voxel_size,
+                constant_upsample=constant_upsample)
 
             print(prefix + "g_out_upsampled: " + str(g_out_upsampled.shape))
 
