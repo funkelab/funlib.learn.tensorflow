@@ -128,7 +128,8 @@ def downsample(
 
     if not np.all(np.array(in_shape[2:]) % np.array(factors) == 0):
         raise RuntimeWarning(
-            "Input shape is not evenly divisible by downsample factors.")
+            "Input shape %s is not evenly divisible by downsample factor %s." %
+            (in_shape[2:], factors))
 
     fmaps = tf.layers.max_pooling3d(
         fmaps_in,
