@@ -136,6 +136,7 @@ def ultrametric_loss_op(
         add_coordinates=True,
         coordinate_scale=1.0,
         pretrain=False,
+        pretrain_balance=False,
         name=None):
     '''Returns a tensorflow op to compute the ultra-metric quadrupel loss::
 
@@ -177,6 +178,19 @@ def ultrametric_loss_op(
             pairs only. The loss of positive pairs is the Euclidean distance of
             their maximin edge squared, of negative pairs ``max(0, alpha -
             distance)`` squared.
+
+        pretrain_balance (optional, ``bool``):
+
+            If ``false`` (the default), the total loss is the sum of positive
+            pair losses and negative pair losses, divided by the total number
+            of pairs. This puts more emphasis on the set of pairs (positive or
+            negative) that occur more frequently.
+
+            If ``true``, the total loss is the sum of positive pair losses and
+            negative pair losses; each divided by the number of positive and
+            negative pairs, respectively. This puts equal emphasis on positive
+            and negative pairs, independent of the number of positive and
+            negative pairs.
 
         name (optional, ``string``):
 
@@ -268,11 +282,21 @@ def ultrametric_loss_op(
             tf.square(tf.maximum(0.0, alpha - dist)),
             ratio_neg)
 
-        sum_pos = tf.reduce_sum(loss_pos)*num_pairs_pos
-        sum_neg = tf.reduce_sum(loss_neg)*num_pairs_neg
-        num_pairs = num_pairs_pos + num_pairs_neg
+        if pretrain_balance:
 
-        loss = (sum_pos + sum_neg)/num_pairs
+            # the ratios returned by get_um_loss are already class balanced,
+            # there is nothing more to do than to add the losses up
+            loss = tf.reduce_sum(loss_pos) + tf.reduce_sum(loss_neg)
+
+        else:
+
+            # denormalize the ratios, add them up, and divide by the total
+            # number of pairs
+            sum_pos = tf.reduce_sum(loss_pos)*num_pairs_pos
+            sum_neg = tf.reduce_sum(loss_neg)*num_pairs_neg
+            num_pairs = num_pairs_pos + num_pairs_neg
+
+            loss = (sum_pos + sum_neg)/num_pairs
 
     else:
 
