@@ -226,7 +226,7 @@ def ultrametric_loss_op(
         embedding = tf.concat([embedding, coordinates], 0)
 
         max_scale = max(scale)
-        min_scale = max(scale)
+        min_scale = min(scale)
         min_d = min_scale
         max_d = np.sqrt(max_scale**2 + k)
 
