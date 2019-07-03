@@ -546,13 +546,13 @@ def unet(
     if kernel_size_down is None:
         kernel_size_down = [[3, 3]]*(len(downsample_factors) + 1)
     if kernel_size_up is None:
-        kernel_size_up = [[3, 3]]*(len(downsample_factors) + 1)
+        kernel_size_up = [[3, 3]]*len(downsample_factors)
 
     assert (
         len(fmap_inc_factors) ==
         len(downsample_factors) ==
         len(kernel_size_down) - 1 ==
-        len(kernel_size_up) - 1)
+        len(kernel_size_up))
 
     # convolve
     f_left, fov = conv_pass(
