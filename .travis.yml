@@ -1,10 +1,13 @@
 language: python
 
+dist: xenial
+
 python:
   - "3.6"
 
 before_install:
   - sudo apt-get update
+  - sudo apt-get install libmlpack-dev
   - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh -O miniconda.sh;
   - bash miniconda.sh -b -p $HOME/miniconda
   - export PATH="$HOME/miniconda/bin:$PATH"
@@ -14,7 +17,7 @@ before_install:
   - conda info -a
   - conda create -q -n funlib python=$TRAVIS_PYTHON_VERSION
   - source activate funlib
-  - conda install -c conda-forge tensorflow mlpack
+  - conda install -c conda-forge tensorflow
 
 install:
   - make install-dev
