@@ -67,16 +67,6 @@ def conv_pass(
         activation = getattr(tf.nn, activation)
 
     for i, kernel_size in enumerate(kernel_sizes):
-
-        if isinstance(kernel_size, int):
-            kernel_size = [kernel_size]*len(voxel_size)
-
-        fov = tuple(
-            f + (k - 1)*vs
-            for f, k, vs
-            in zip(fov, kernel_size, voxel_size)
-        )
-
         in_shape = tuple(fmaps.get_shape().as_list())
         if len(in_shape) == 6:
             conv_op = conv4d
@@ -85,6 +75,15 @@ def conv_pass(
         else:
             raise RuntimeError(
                 "Input tensor of shape %s not supported" % (in_shape,))
+
+        if isinstance(kernel_size, int):
+            kernel_size = [kernel_size]*(len(in_shape) - 2)
+
+        fov = tuple(
+            f + (k - 1)*vs
+            for f, k, vs
+            in zip(fov, kernel_size, voxel_size)
+        )
 
         fmaps = conv_op(
             inputs=fmaps,
@@ -112,13 +111,12 @@ def downsample(
         factors,
         name='down',
         voxel_size=(1, 1, 1)):
-
     voxel_size = tuple(vs*fac for vs, fac in zip(voxel_size, factors))
     in_shape = fmaps_in.get_shape().as_list()
     is_4d = len(in_shape) == 6
 
     if is_4d:
-
+        orig_in_shape = in_shape
         # store time dimension in channels
         fmaps_in = tf.reshape(fmaps_in, (
             in_shape[0],
@@ -126,6 +124,7 @@ def downsample(
             in_shape[3],
             in_shape[4],
             in_shape[5]))
+        in_shape = fmaps_in.get_shape().as_list()
 
     if not np.all(np.array(in_shape[2:]) % np.array(factors) == 0):
         raise RuntimeWarning(
@@ -146,9 +145,9 @@ def downsample(
 
         # restore time dimension
         fmaps = tf.reshape(fmaps, (
-            in_shape[0],
-            in_shape[1],
-            in_shape[2],
+            orig_in_shape[0],
+            orig_in_shape[1],
+            orig_in_shape[2],
             out_shape[2],
             out_shape[3],
             out_shape[4]))

@@ -93,7 +93,7 @@ def conv4d(
     assert len(inputs.get_shape().as_list()) == 6, (
         "Tensor of shape (b, c, l, d, h, w) expected")
     assert isinstance(kernel_size, int) or len(kernel_size) == 4, (
-        "kernel size should be an integer or a 4D tuple")
+        "kernel size should be an integer or a 4D tuple, not %s" % kernel_size)
     assert strides == (1, 1, 1, 1), (
         "Strides other than 1 not yet implemented")
     assert data_format == 'channels_first', (
