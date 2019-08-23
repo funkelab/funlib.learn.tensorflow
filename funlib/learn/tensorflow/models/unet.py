@@ -425,7 +425,6 @@ def crop_to_factor(fmaps_in, factor, kernel_sizes):
 
     shape = fmaps_in.get_shape().as_list()
     spatial_dims = len(shape) - 2
-    # spatial_dims = 3 if len(shape) == 5 else 4
     spatial_shape = shape[-spatial_dims:]
 
     # the crop that will already be done due to the convolutions
