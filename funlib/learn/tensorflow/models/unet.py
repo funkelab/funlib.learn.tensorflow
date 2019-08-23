@@ -316,7 +316,6 @@ def upsample(
                 name=name,
                 )
 
-
         else:
             fmaps = tf.layers.conv3d_transpose(
                 fmaps_in,

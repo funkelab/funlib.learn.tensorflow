@@ -86,9 +86,8 @@ class TestUNet(tf.test.TestCase):
 
                 assert unet.get_shape().as_list() == [1, 1, 48, 48, 48]
 
-
     def test_2d(self):
-        
+
         with self.test_session():
 
             with tf.variable_scope('fail'):
