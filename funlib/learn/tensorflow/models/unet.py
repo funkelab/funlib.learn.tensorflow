@@ -270,7 +270,7 @@ def upsample(
                 output_shape=out_shape,
                 strides=(1, 1) + tuple(factors),
                 padding='VALID',
-                data_format='NCDHW',
+                data_format='NCHW',
                 name=name)
 
             if activation is not None:
