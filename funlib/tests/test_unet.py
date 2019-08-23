@@ -85,3 +85,40 @@ class TestUNet(tf.test.TestCase):
                     downsample_factors=[[2, 2, 2], [3, 3, 3]])
 
                 assert unet.get_shape().as_list() == [1, 1, 48, 48, 48]
+
+    def test_2d(self):
+
+        with self.test_session():
+
+            with tf.variable_scope('fail'):
+                with pytest.raises(AssertionError):
+                    fmaps = tf.placeholder(
+                        tf.float32,
+                        shape=(1, 1, 22, 25))
+                    unet, _, _ = models.unet(
+                        fmaps_in=fmaps,
+                        num_fmaps=1,
+                        fmap_inc_factors=1,
+                        downsample_factors=[[3, 3]])
+
+            with tf.variable_scope('minimal'):
+                fmaps = tf.placeholder(tf.float32, shape=(1, 1, 25, 25))
+                unet, _, _ = models.unet(
+                    fmaps_in=fmaps,
+                    num_fmaps=1,
+                    fmap_inc_factors=2,
+                    downsample_factors=[[3, 3]])
+
+                assert unet.get_shape().as_list() == [1, 1, 3, 3]
+
+            with tf.variable_scope('nested'):
+                i = 102
+                fmaps = tf.placeholder(tf.float32, shape=(1, 1, i, i))
+                unet, _, _ = models.unet(
+                    fmaps_in=fmaps,
+                    num_fmaps=1,
+                    fmap_inc_factors=1,
+                    kernel_size_up=[[3], [3, 3]],
+                    downsample_factors=[[2, 2], [3, 3]])
+
+                assert unet.get_shape().as_list() == [1, 1, 48, 48]

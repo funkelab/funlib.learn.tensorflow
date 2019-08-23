@@ -68,10 +68,14 @@ def conv_pass(
 
     for i, kernel_size in enumerate(kernel_sizes):
         in_shape = tuple(fmaps.get_shape().as_list())
+
+        # Explicitly handle number of dimensions
         if len(in_shape) == 6:
             conv_op = conv4d
         elif len(in_shape) == 5:
             conv_op = tf.layers.conv3d
+        elif len(in_shape) == 4:
+            conv_op = tf.layers.conv2d
         else:
             raise RuntimeError(
                 "Input tensor of shape %s not supported" % (in_shape,))
@@ -113,7 +117,10 @@ def downsample(
         voxel_size=(1, 1, 1)):
     voxel_size = tuple(vs*fac for vs, fac in zip(voxel_size, factors))
     in_shape = fmaps_in.get_shape().as_list()
+
+    # Explicitly handle number of dimensions
     is_4d = len(in_shape) == 6
+    is_2d = len(in_shape) == 4
 
     if is_4d:
         orig_in_shape = in_shape
@@ -131,13 +138,23 @@ def downsample(
             "Input shape %s is not evenly divisible by downsample factor %s." %
             (in_shape[2:], factors))
 
-    fmaps = tf.layers.max_pooling3d(
-        fmaps_in,
-        pool_size=factors,
-        strides=factors,
-        padding='valid',
-        data_format='channels_first',
-        name=name)
+    if is_2d:
+        fmaps = tf.layers.max_pooling2d(
+            fmaps_in,
+            pool_size=factors,
+            strides=factors,
+            padding='valid',
+            data_format='channels_first',
+            name=name,
+        )
+    else:
+        fmaps = tf.layers.max_pooling3d(
+            fmaps_in,
+            pool_size=factors,
+            strides=factors,
+            padding='valid',
+            data_format='channels_first',
+            name=name)
 
     if is_4d:
 
@@ -216,6 +233,9 @@ def upsample(
         h*f_y, w*f_x)`.
     '''
 
+    # Explicitly handle number of dimensions
+    is_2d = len(fmaps_in.get_shape().as_list()) == 4
+
     voxel_size = tuple(vs/fac for vs, fac in zip(voxel_size, factors))
     if activation is not None:
         activation = getattr(tf.nn, activation)
@@ -229,43 +249,83 @@ def upsample(
             in_shape[0],
             num_fmaps_out) + tuple(s*f for s, f in zip(in_shape[2:], factors))
 
-        # (num_fmaps_out * num_fmaps_in)
-        kernel_variables = tf.get_variable(
-            name + '_kernel_variables',
-            (num_fmaps_out * num_fmaps_in,),
-            dtype=tf.float32)
-        # (1, 1, 1, num_fmaps_out, num_fmaps_in)
-        kernel_variables = tf.reshape(
-            kernel_variables,
-            (1, 1, 1) + (num_fmaps_out, num_fmaps_in))
-        # (f_z, f_y_ f_x, num_fmaps_out, num_fmaps_in)
-        constant_upsample_filter = repeat(
-            kernel_variables,
-            tuple(factors) + (1, 1))
+        if is_2d:
+            # (num_fmaps_out * num_fmaps_in)
+            kernel_variables = tf.get_variable(
+                name + '_kernel_variables',
+                (num_fmaps_out * num_fmaps_in,),
+                dtype=tf.float32)
+            # (1, 1, num_fmaps_out, num_fmaps_in)
+            kernel_variables = tf.reshape(
+                kernel_variables,
+                (1, 1) + (num_fmaps_out, num_fmaps_in))
+            # (f_y, f_x, num_fmaps_out, num_fmaps_in)
+            constant_upsample_filter = repeat(
+                kernel_variables,
+                tuple(factors) + (1, 1))
 
-        fmaps = tf.nn.conv3d_transpose(
-            fmaps_in,
-            filter=constant_upsample_filter,
-            output_shape=out_shape,
-            strides=(1, 1) + tuple(factors),
-            padding='VALID',
-            data_format='NCDHW',
-            name=name)
+            fmaps = tf.nn.conv2d_transpose(
+                fmaps_in,
+                filter=constant_upsample_filter,
+                output_shape=out_shape,
+                strides=(1, 1) + tuple(factors),
+                padding='VALID',
+                data_format='NCHW',
+                name=name)
 
-        if activation is not None:
-            fmaps = activation(fmaps)
+            if activation is not None:
+                fmaps = activation(fmaps)
+
+        else:
+            # (num_fmaps_out * num_fmaps_in)
+            kernel_variables = tf.get_variable(
+                name + '_kernel_variables',
+                (num_fmaps_out * num_fmaps_in,),
+                dtype=tf.float32)
+            # (1, 1, 1, num_fmaps_out, num_fmaps_in)
+            kernel_variables = tf.reshape(
+                kernel_variables,
+                (1, 1, 1) + (num_fmaps_out, num_fmaps_in))
+            # (f_z, f_y, f_x, num_fmaps_out, num_fmaps_in)
+            constant_upsample_filter = repeat(
+                kernel_variables,
+                tuple(factors) + (1, 1))
+
+            fmaps = tf.nn.conv3d_transpose(
+                fmaps_in,
+                filter=constant_upsample_filter,
+                output_shape=out_shape,
+                strides=(1, 1) + tuple(factors),
+                padding='VALID',
+                data_format='NCDHW',
+                name=name)
+
+            if activation is not None:
+                fmaps = activation(fmaps)
 
     else:
+        if is_2d:
+            fmaps = tf.layers.conv2d_transpose(
+                fmaps_in,
+                filters=num_fmaps,
+                kernel_size=factors,
+                strides=factors,
+                padding='valid',
+                data_format='channels_first',
+                activation=activation,
+                name=name,
+                )
 
-        fmaps = tf.layers.conv3d_transpose(
-            fmaps_in,
-            filters=num_fmaps,
-            kernel_size=factors,
-            strides=factors,
-            padding='valid',
-            data_format='channels_first',
-            activation=activation,
-            name=name)
+        else:
+            fmaps = tf.layers.conv3d_transpose(
+                fmaps_in,
+                filters=num_fmaps,
+                kernel_size=factors,
+                strides=factors,
+                padding='valid',
+                data_format='channels_first',
+                activation=activation,
+                name=name)
 
     return fmaps, voxel_size
 
@@ -288,7 +348,9 @@ def crop(fmaps_in, shape):
 
     in_shape = fmaps_in.get_shape().as_list()
 
+    # Explicitly handle number of dimensions
     in_is_4d = len(in_shape) == 6
+    in_is_2d = len(in_shape) == 4
     out_is_4d = len(shape) == 6
 
     if in_is_4d and not out_is_4d:
@@ -312,6 +374,20 @@ def crop(fmaps_in, shape):
             shape[4],
             shape[5],
         ]
+    elif in_is_2d:
+        offset = [
+            0,  # batch
+            0,  # channel
+            (in_shape[2] - shape[2])//2,  # y
+            (in_shape[3] - shape[3])//2,  # x
+        ]
+        size = [
+            in_shape[0],
+            in_shape[1],
+            shape[2],
+            shape[3],
+        ]
+
     else:
         offset = [
             0,  # batch
@@ -348,7 +424,7 @@ def crop_to_factor(fmaps_in, factor, kernel_sizes):
     '''
 
     shape = fmaps_in.get_shape().as_list()
-    spatial_dims = 3 if len(shape) == 5 else 4
+    spatial_dims = len(shape) - 2
     spatial_shape = shape[-spatial_dims:]
 
     # the crop that will already be done due to the convolutions
