@@ -2,12 +2,6 @@ import numpy as np
 cimport numpy as np
 from libc.stdint cimport int64_t
 
-cdef extern from "emst.h":
-    void mlpack_emst(
-        int numPoints,
-        int numDims,
-        const double* points,
-        double* mst);
 
 cdef extern from "um_loss.h":
     double c_um_loss_gradient(
@@ -21,26 +15,6 @@ cdef extern from "um_loss.h":
         double& totalNumPairsPos,
         double& totalNumPairsNeg);
 
-def emst(np.ndarray[double, ndim=2] points):
-
-    cdef int num_points = points.shape[0]
-    cdef int num_dims = points.shape[1]
-
-    # the C++ part assumes contiguous memory, make sure we have it (and do 
-    # nothing, if we do)
-    if not points.flags['C_CONTIGUOUS']:
-        print("Creating memory-contiguous points arrray (avoid this by "
-              "passing C_CONTIGUOUS arrays)")
-        points = np.ascontiguousarray(points)
-
-    # prepare emst array
-    cdef np.ndarray[double, ndim=2] output = np.zeros(
-            (num_points - 1, 3),
-            dtype=np.float64)
-
-    mlpack_emst(num_points, num_dims, &points[0, 0], &output[0, 0])
-
-    return output
 
 def um_loss(
     np.ndarray[double, ndim=2] mst,

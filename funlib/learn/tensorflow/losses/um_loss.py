@@ -1,16 +1,16 @@
-from .impl import emst as euclidean_mst
 from .impl import um_loss
 from .py_func_gradient import py_func_gradient
 import logging
 import numpy as np
 import tensorflow as tf
+import mlpack as mlp
 
 logger = logging.getLogger(__name__)
 
 
 def get_emst(embedding):
 
-    emst = euclidean_mst(embedding.astype(np.float64))
+    emst = mlp.emst(embedding.astype(np.float64))['output']
 
     d_min = np.min(emst[:, 2])
     d_max = np.max(emst[:, 2])
