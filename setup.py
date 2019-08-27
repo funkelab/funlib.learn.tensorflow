@@ -45,12 +45,11 @@ setup(
                 'funlib.learn.tensorflow.losses.impl.wrappers',
                 sources=[
                     'funlib/learn/tensorflow/losses/impl/wrappers.pyx',
-                    'funlib/learn/tensorflow/losses/impl/emst.cpp',
                     'funlib/learn/tensorflow/losses/impl/um_loss.cpp',
                 ],
                 include_dirs=include_dirs,
                 library_dirs=library_dirs,
-                extra_link_args=['-std=c++11', "-lmlpack"],
+                extra_link_args=['-std=c++11'],
                 extra_compile_args=['-O3', '-std=c++11'],
                 language='c++')
         ])
