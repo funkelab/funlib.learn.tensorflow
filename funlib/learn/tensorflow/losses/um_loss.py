@@ -135,15 +135,19 @@ def ultrametric_loss_op(
         alpha=0.1,
         add_coordinates=True,
         coordinate_scale=1.0,
-        pretrain=False,
-        pretrain_balance=False,
+        balance=True,
+        quadrupel_loss=False,
         name=None):
-    '''Returns a tensorflow op to compute the ultra-metric quadrupel loss::
+    '''Returns a tensorflow op to compute the ultra-metric loss on pairs of
+    embedding points::
 
-        L = sum_p sum_n max(0, d(n) - d(p) + alpha)^2
+        L = 1/P * sum_p d(p)^2 + 1/N * sum_n max(0, alpha - d(n))^2
 
-    where ``p`` and ``n`` are pairs points with same and different labels,
-    respectively, and ``d(.)`` the ultrametric distance between the points.
+    where ``p`` and ``n`` are pairs of points with same and different labels in
+    ``gt_seg``, respectively, and ``d(.)`` the ultrametric distance between the
+    points. ``P`` and ``N`` are the total number of positive and negative
+    pairs. Pairs that have at least one point with a label of 0 (background)
+    are ignored.
 
     Args:
 
@@ -168,29 +172,31 @@ def ultrametric_loss_op(
             If ``True``, add the ``(z, y, x)`` coordinates of the points to the
             embedding.
 
-        coordinate_scale(optional, ``float`` or ``tuple`` of ``float``):
+        coordinate_scale (optional, ``float`` or ``tuple`` of ``float``):
 
             How to scale the coordinates, if used to augment the embedding.
 
-        pretrain (optional, ``bool``):
+        balance (optional, ``bool``):
 
-            Instead of computing the loss on all quadrupels, compute it on
-            pairs only. The loss of positive pairs is the Euclidean distance of
-            their maximin edge squared, of negative pairs ``max(0, alpha -
-            distance)`` squared.
+            If ``true`` (the default), the total loss is the sum of positive
+            pair losses and negative pair losses; each divided by the number of
+            positive and negative pairs, respectively. This puts equal emphasis
+            on positive and negative pairs, independent of the number of
+            positive and negative pairs.
 
-        pretrain_balance (optional, ``bool``):
+            If ``false``, the total loss is the sum of positive pair losses and
+            negative pair losses, divided by the total number of pairs. This
+            puts more emphasis on the set of pairs (positive or negative) that
+            occur more frequently::
 
-            If ``false`` (the default), the total loss is the sum of positive
-            pair losses and negative pair losses, divided by the total number
-            of pairs. This puts more emphasis on the set of pairs (positive or
-            negative) that occur more frequently.
+                L = 1/(P + N) * (sum_p d(p)^2 + sum_n max(0, alpha - d(n))^2)
 
-            If ``true``, the total loss is the sum of positive pair losses and
-            negative pair losses; each divided by the number of positive and
-            negative pairs, respectively. This puts equal emphasis on positive
-            and negative pairs, independent of the number of positive and
-            negative pairs.
+        quadrupel_loss (optional, ``bool``):
+
+            If ``true``, compute the loss on all quadrupels of points, instead
+            of pairs of points::
+
+                L = 1/(P*N) * sum_p sum_n max(0, d(p) - d(n) + alpha)^2
 
         name (optional, ``string``):
 
@@ -237,8 +243,7 @@ def ultrametric_loss_op(
                 "in [0, 1], if it is not, you might ignore this warning)",
                 min_d, max_d)
 
-    # 2. Transpose into tensor (d*h*w, k+3), i.e., one embedding vector per
-    #    node, augmented by spatial coordinates if requested.
+    # 2. Transpose into tensor (d*h*w, k), i.e., one embedding vector per node.
 
     embedding = tf.transpose(embedding, perm=[1, 2, 3, 0])
     embedding = tf.reshape(embedding, [depth*width*height, -1])
@@ -264,7 +269,17 @@ def ultrametric_loss_op(
 
     alpha = tf.constant(alpha, dtype=tf.float32)
 
-    if pretrain:
+    if quadrupel_loss:
+
+        loss = py_func_gradient(
+            get_um_loss,
+            [emst, dist, gt_seg, alpha],
+            [tf.float32, tf.float32, tf.float32, tf.float32, tf.float32],
+            gradient_op=get_um_loss_gradient_op,
+            name=name,
+            stateful=False)[0]
+
+    else:
 
         # we need the um_loss just to get the ratio_pos, ratio_neg, and the
         # total number of positive and negative pairs
@@ -282,7 +297,7 @@ def ultrametric_loss_op(
             tf.square(tf.maximum(0.0, alpha - dist)),
             ratio_neg)
 
-        if pretrain_balance:
+        if balance:
 
             # the ratios returned by get_um_loss are already class balanced,
             # there is nothing more to do than to add the losses up
@@ -297,15 +312,5 @@ def ultrametric_loss_op(
             num_pairs = num_pairs_pos + num_pairs_neg
 
             loss = (sum_pos + sum_neg)/num_pairs
-
-    else:
-
-        loss = py_func_gradient(
-            get_um_loss,
-            [emst, dist, gt_seg, alpha],
-            [tf.float32, tf.float32, tf.float32, tf.float32, tf.float32],
-            gradient_op=get_um_loss_gradient_op,
-            name=name,
-            stateful=False)[0]
 
     return (loss, emst, edges_u, edges_v, dist)

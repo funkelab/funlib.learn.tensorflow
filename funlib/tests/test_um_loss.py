@@ -28,7 +28,7 @@ class TestUmLoss(unittest.TestCase):
             self.assertEqual(loss, 0)
             self.assertEqual(np.sum(distances), 0)
 
-    def test_simple_pretrain(self):
+    def test_simple(self):
 
         embedding = np.array(
             [[0, 1, 2],
@@ -59,8 +59,8 @@ class TestUmLoss(unittest.TestCase):
             segmentation,
             alpha=2,
             add_coordinates=False,
-            pretrain=True,
-            name='um_test_simple')
+            balance=False,
+            name='um_test_simple_unbalanced')
 
         with tf.Session() as s:
 
@@ -70,12 +70,27 @@ class TestUmLoss(unittest.TestCase):
             self.assertEqual(loss, 1.0)
             self.assertAlmostEqual(np.sum(distances), 8, places=4)
 
-    def test_simple(self):
+        loss = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            alpha=2,
+            add_coordinates=False,
+            name='um_test_simple_balanced')
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss)
+
+            self.assertEqual(loss, 2.0)
+            self.assertAlmostEqual(np.sum(distances), 8, places=4)
+
+    def test_quadrupel_loss(self):
 
         embedding = np.array(
             [[0, 1, 2],
-             [3, 4, 5],
-             [6, 7, 8]],
+             [4, 5, 6],
+             [8, 9, 10]],
             dtype=np.float32).reshape((1, 1, 3, 3))
 
         segmentation = np.array(
@@ -88,7 +103,7 @@ class TestUmLoss(unittest.TestCase):
         # number of negative pairs: 3*3*3 = 27
         # number of quadrupels: 9*27 = 243
 
-        # loss per quadrupel: (d(n) - d(p) + alpha)^2 = (1 - 1 + 2)^2 = 4
+        # loss per quadrupel: max(0, d(p) - d(n) + alpha)^2 = (1 - 2 + 3)^2 = 4
 
         embedding = tf.constant(embedding, dtype=tf.float32)
         segmentation = tf.constant(segmentation)
@@ -96,9 +111,10 @@ class TestUmLoss(unittest.TestCase):
         loss = ultrametric_loss_op(
             embedding,
             segmentation,
-            alpha=2,
+            alpha=3,
             add_coordinates=False,
-            name='um_test_simple')
+            quadrupel_loss=True,
+            name='um_test_quadrupel_loss')
 
         with tf.Session() as s:
 
@@ -112,4 +128,4 @@ class TestUmLoss(unittest.TestCase):
             print(distances)
 
             self.assertEqual(loss, 4.0)
-            self.assertAlmostEqual(np.sum(distances), 8, places=4)
+            self.assertAlmostEqual(np.sum(distances), 10, places=4)
