@@ -203,3 +203,53 @@ double c_um_loss_gradient(
 
 	return loss;
 }
+
+void c_prune_mst(
+	size_t numNodes,
+	size_t numComponents,
+	const double* mst,
+	const int64_t* labels,
+	const int64_t* components,
+	double* filtered_mst) {
+
+	// disjoint sets datastructure to keep track of component merging
+	std::vector<size_t> rank(numComponents);
+	std::vector<int64_t> parent(numComponents);
+	std::map<uint64_t, std::size_t> componentIndices;
+	boost::disjoint_sets<size_t*, int64_t*> sets(&rank[0], &parent[0]);
+
+	for (size_t i = 0; i < numComponents; i++) {
+
+		// initially, every component is in its own cluster
+		componentIndices[components[i]] = i;
+		sets.make_set(i);
+	}
+
+	size_t j = 0;
+	size_t c = 0;
+	for (size_t i = 0; i < numNodes - 1; i++) {
+
+		int64_t u = mst[i*3];
+		int64_t v = mst[i*3 + 1];
+
+		int64_t componentU = componentIndices.at(labels[u]);
+		int64_t componentV = componentIndices.at(labels[v]);
+
+		int64_t clusterU = sets.find_set(componentU);
+		int64_t clusterV = sets.find_set(componentV);
+
+		// components already got merged
+		if (clusterU == clusterV)
+			continue;
+
+		filtered_mst[j*3] = mst[i*3];
+		filtered_mst[j*3 + 1] = mst[i*3 + 1];
+		filtered_mst[j*3 + 2] = mst[i*3 + 2];
+		j++;
+
+		// link sets
+		sets.link(clusterU, clusterV);
+	}
+
+	assert(j == numComponents - 1);
+}

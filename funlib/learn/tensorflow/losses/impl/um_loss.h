@@ -10,3 +10,11 @@ double c_um_loss_gradient(
 	double* ratioNeg,
 	double& totalNumPairsPos,
 	double& totalNumPairsNeg);
+
+void c_prune_mst(
+	size_t numNodes,
+	size_t numComponents,
+	const double* mst,
+	const int64_t* labels,
+	const int64_t* components,
+	double* filtered_mst);

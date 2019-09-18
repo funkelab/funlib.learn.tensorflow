@@ -1,4 +1,4 @@
-from .impl import um_loss
+from .impl import um_loss, prune_mst
 from .py_func_gradient import py_func_gradient
 import logging
 import numpy as np
@@ -19,14 +19,85 @@ def get_emst(embedding):
     return emst
 
 
-def get_emst_op(embedding, name=None):
+def get_constrained_emst(embedding, labels):
 
-    return tf.py_func(
-        get_emst,
-        [embedding],
-        [tf.float64],
-        name=name,
-        stateful=False)[0]
+    embedding = embedding.astype(np.float64)
+    components = np.unique(labels)
+    num_points = embedding.shape[0]
+    indices = np.arange(num_points)
+
+    component_emsts = []
+
+    # grow inside each component first
+    for component in components:
+
+        mask = labels == component
+        masked_embedding = embedding[mask]
+        masked_indices = indices[mask]
+
+        component_emst = mlp.emst(masked_embedding)['output']
+
+        # fix indices
+        component_indices = component_emst[:, 0:2].astype(np.int32)
+        component_emst[:, 0:2] = masked_indices[component_indices]
+
+        component_emsts.append(component_emst)
+
+    # grow on complete embedding
+    complete_emst = mlp.emst(embedding)['output']
+
+    # prune emst to only connect components
+    pruned_emst = prune_mst(complete_emst, labels, components)
+    print(pruned_emst)
+
+    emst = np.concatenate(component_emsts + [pruned_emst])
+    print(emst)
+
+    assert emst.shape[0] == num_points - 1
+
+    d_min = np.min(emst[:, 2])
+    d_max = np.max(emst[:, 2])
+    logger.info("min/max ultrametric: %f/%f", d_min, d_max)
+
+    return emst
+
+
+def get_emst_op(embedding, constrain_to=None, name=None):
+    '''Compute the EMST for the given embedding.
+
+    Args:
+
+        embedding (Tensor, shape ``(n, k)``):
+
+            A k-dimensional feature embedding of n points.
+
+        constrain_to (Tensor, shape ``(n, k)``, optional):
+
+            Labels for the points in ``embedding``. If given, the EMST will be
+            constrained to first grow inside each component, then connect the
+            components to each other.
+
+    Returns:
+
+        A tensor ``(n-1, 3)`` representing the EMST as rows of ``(u, v,
+        distance)``, where ``u`` and ``v`` are indices of points in
+        ``embedding``.
+    '''
+
+    if constrain_to is not None:
+        return tf.py_func(
+            get_constrained_emst,
+            [embedding, constrain_to],
+            [tf.float64],
+            name=name,
+            stateful=False)[0]
+    else:
+        return tf.py_func(
+            get_emst,
+            [embedding],
+            [tf.float64],
+            name=name,
+            stateful=False)[0]
 
 
 def get_um_loss(mst, dist, gt_seg, alpha):
@@ -137,6 +208,7 @@ def ultrametric_loss_op(
         coordinate_scale=1.0,
         balance=True,
         quadrupel_loss=False,
+        constrained_emst=False,
         name=None):
     '''Returns a tensorflow op to compute the ultra-metric loss on pairs of
     embedding points::
@@ -198,6 +270,12 @@ def ultrametric_loss_op(
 
                 L = 1/(P*N) * sum_p sum_n max(0, d(p) - d(n) + alpha)^2
 
+        constrained_emst (optional, ``bool``):
+
+            If set to ``true``, compute the EMST such that it first grows
+            inside each component of the same label in ``gt_seg``, then between
+            the components. This results in a loss that is an upper bound of L.
+
         name (optional, ``string``):
 
             An optional name for the operator.
@@ -256,7 +334,10 @@ def ultrametric_loss_op(
 
     # 3. Get the EMST on the embedding vectors.
 
-    emst = get_emst_op(embedding)
+    if constrained_emst:
+        emst = get_emst_op(embedding, constrain_to=gt_seg)
+    else:
+        emst = get_emst_op(embedding)
 
     # 4. Compute the lengths of EMST edges
 

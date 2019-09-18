@@ -77,13 +77,46 @@ class TestUmLoss(unittest.TestCase):
             add_coordinates=False,
             name='um_test_simple_balanced')
 
+    def test_constrained(self):
+
+        embedding = np.array(
+            [[0, 1, 101],
+             [2, 3, 4],
+             [5, 6, 7]],
+            dtype=np.float32).reshape((1, 1, 3, 3))
+
+        segmentation = np.array(
+            [[1, 1, 1],
+             [2, 2, 2],
+             [3, 3, 3]],
+            dtype=np.int64).reshape((1, 3, 3))
+
+        # number of positive pairs: 3*3 = 9
+        # number of negative pairs: 3*3*3 = 27
+        # total number of pairs: 9*8/2 = 36
+
+        # loss on positive pairs: 6*1 + 1 + 2*100^2 = 20007
+        # loss on negative pairs: 27*1 = 27
+        # total loss: 1/9*20007 + 1/27*27 = 2224
+
+        embedding = tf.constant(embedding, dtype=tf.float32)
+        segmentation = tf.constant(segmentation)
+
+        loss = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            alpha=2,
+            add_coordinates=False,
+            constrained_emst=True,
+            name='um_test_constrained')
+
         with tf.Session() as s:
 
             s.run(tf.global_variables_initializer())
             loss, emst, edges_u, edges_v, distances = s.run(loss)
 
-            self.assertEqual(loss, 2.0)
-            self.assertAlmostEqual(np.sum(distances), 8, places=4)
+            self.assertAlmostEqual(loss, 2224.0, places=1)
+            self.assertAlmostEqual(np.sum(distances), 107, places=4)
 
     def test_quadrupel_loss(self):
 

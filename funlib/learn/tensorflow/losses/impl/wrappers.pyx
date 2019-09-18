@@ -14,7 +14,13 @@ cdef extern from "um_loss.h":
         double* ratioNeg,
         double& totalNumPairsPos,
         double& totalNumPairsNeg);
-
+    void c_prune_mst(
+        size_t numNodes,
+        size_t numComponents,
+        const double* mst,
+        const int64_t* labels,
+        const int64_t* components,
+        double* filtered_mst);
 
 def um_loss(
     np.ndarray[double, ndim=2] mst,
@@ -73,3 +79,52 @@ def um_loss(
         ratio_neg,
         num_pairs_pos,
         num_pairs_neg)
+
+
+def prune_mst(
+        np.ndarray[double, ndim=2] mst,
+        np.ndarray[int64_t, ndim=1] labels,
+        np.ndarray[int64_t, ndim=1] components):
+    '''Filter edges of an MST such that only edges connecting differently
+    labeled components remain. The edges will form a spanning tree between the
+    components.'''
+
+    cdef size_t num_edges = mst.shape[0]
+    cdef size_t num_points = labels.shape[0]
+    cdef size_t num_components = components.shape[0]
+
+    assert num_points == num_edges + 1, ("Number of edges in MST is unequal "
+                                         "number of points in segmentation "
+                                         "minus one.")
+
+    assert mst.shape[1] == 3, "mst not given as rows of [u, v, dist]"
+
+    # the C++ part assumes contiguous memory, make sure we have it (and do 
+    # nothing, if we do)
+    if not mst.flags['C_CONTIGUOUS']:
+        print("Creating memory-contiguous mst arrray (avoid this by "
+              "passing C_CONTIGUOUS arrays)")
+        mst = np.ascontiguousarray(mst)
+    if not labels.flags['C_CONTIGUOUS']:
+        print("Creating memory-contiguous labels arrray (avoid this by "
+              "passing C_CONTIGUOUS arrays)")
+        labels = np.ascontiguousarray(labels)
+    if not components.flags['C_CONTIGUOUS']:
+        print("Creating memory-contiguous components arrray (avoid this by "
+              "passing C_CONTIGUOUS arrays)")
+        components = np.ascontiguousarray(components)
+
+    # prepare output arrays
+    cdef np.ndarray[double, ndim=2] filtered_mst = np.zeros(
+            (num_components - 1, 3),
+            dtype=np.float64)
+
+    c_prune_mst(
+        num_points,
+        num_components,
+        &mst[0, 0],
+        &labels[0],
+        &components[0],
+        &filtered_mst[0, 0])
+
+    return filtered_mst
