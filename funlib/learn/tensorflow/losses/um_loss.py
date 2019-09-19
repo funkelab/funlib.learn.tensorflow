@@ -29,7 +29,7 @@ def get_unconstrained_emst(embedding):
 
 
 def get_constrained_emst(embedding, labels):
-    
+
     if embedding.shape[0] <= 1:
         logger.warn("can't compute EMST for %d points", embedding.shape[0])
         return np.zeros((0, 3), dtype=np.float64)
