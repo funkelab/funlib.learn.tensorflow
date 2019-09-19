@@ -30,9 +30,9 @@ def um_loss(
     cdef size_t num_points = gt_seg.shape[0]
     cdef size_t num_edges = mst.shape[0]
 
-    assert num_points == num_edges + 1, ("Number of edges in MST is unequal "
-                                         "number of points in segmentation "
-                                         "minus one.")
+    assert num_points == num_edges + 1, (
+        "Number of edges %d in MST is unequal number of points %d in "
+        "segmentation minus one." % (num_edges, num_points))
 
     assert mst.shape[1] == 3, "mst not given as rows of [u, v, dist]"
 
@@ -93,9 +93,9 @@ def prune_mst(
     cdef size_t num_points = labels.shape[0]
     cdef size_t num_components = components.shape[0]
 
-    assert num_points == num_edges + 1, ("Number of edges in MST is unequal "
-                                         "number of points in segmentation "
-                                         "minus one.")
+    assert num_points == num_edges + 1, (
+        "Number of edges %d in MST is unequal number of points %d in "
+        "segmentation minus one." % (num_edges, num_points))
 
     assert mst.shape[1] == 3, "mst not given as rows of [u, v, dist]"
 

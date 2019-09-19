@@ -10,7 +10,16 @@ logger = logging.getLogger(__name__)
 
 def get_emst(embedding):
 
-    emst = mlp.emst(embedding.astype(np.float64))['output']
+    if embedding.shape[0] <= 1:
+        logger.warn("can't compute EMST for %d points", embedding.shape[0])
+        return np.zeros((0, 3), dtype=np.float64)
+
+    return mlp.emst(embedding)['output']
+
+
+def get_unconstrained_emst(embedding):
+
+    emst = get_emst(embedding.astype(np.float64))
 
     d_min = np.min(emst[:, 2])
     d_max = np.max(emst[:, 2])
@@ -35,7 +44,7 @@ def get_constrained_emst(embedding, labels):
         masked_embedding = embedding[mask]
         masked_indices = indices[mask]
 
-        component_emst = mlp.emst(masked_embedding)['output']
+        component_emst = get_emst(masked_embedding)
 
         # fix indices
         component_indices = component_emst[:, 0:2].astype(np.int32)
@@ -44,7 +53,7 @@ def get_constrained_emst(embedding, labels):
         component_emsts.append(component_emst)
 
     # grow on complete embedding
-    complete_emst = mlp.emst(embedding)['output']
+    complete_emst = get_emst(embedding)
 
     # prune emst to only connect components
     pruned_emst = prune_mst(complete_emst, labels, components)
@@ -105,7 +114,7 @@ def get_um_loss(mst, dist, gt_seg, alpha):
 
     Args:
 
-        mst (Tensor, shape ``(3, n-1)``): u, v indices and distance of edges of
+        mst (Tensor, shape ``(n-1, 3)``): u, v indices and distance of edges of
             the MST spanning n nodes.
 
         dist (Tensor, shape ``(n-1)``): The distances of the edges. This
@@ -130,6 +139,14 @@ def get_um_loss(mst, dist, gt_seg, alpha):
         are the ratio of positive and negative pairs that share an edge, of the
         total number of positive and negative pairs.
     '''
+
+    if mst.shape[0] == 0:
+        return (
+            np.float32(0),
+            np.zeros((0,), dtype=np.float32),
+            np.zeros((0,), dtype=np.float32),
+            np.float32(0),
+            np.float32(0))
 
     # We don't use 'dist' here, it is already contained in the mst. It is
     # passed here just so that tensorflow knows there is dependecy to the
@@ -170,6 +187,9 @@ def get_um_loss_gradient(mst, dist, gt_seg, alpha):
 
         A Tensor containing the gradient on the distances.
     '''
+
+    if mst.shape[0] == 0:
+        return np.zeros((0,), dtype=np.float32)
 
     # We don't use 'dist' here, it is already contained in the mst. It is
     # passed here just so that tensorflow knows there is dependecy to the
