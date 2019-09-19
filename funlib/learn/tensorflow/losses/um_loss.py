@@ -61,10 +61,8 @@ def get_constrained_emst(embedding, labels):
 
     # prune emst to only connect components
     pruned_emst = prune_mst(complete_emst, labels, components)
-    print(pruned_emst)
 
     emst = np.concatenate(component_emsts + [pruned_emst])
-    print(emst)
 
     assert emst.shape[0] == num_points - 1
 

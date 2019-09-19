@@ -376,11 +376,5 @@ class TestUmLoss(unittest.TestCase):
             s.run(tf.global_variables_initializer())
             loss, emst, edges_u, edges_v, distances = s.run(loss)
 
-            print(loss)
-            print(emst)
-            print(edges_u)
-            print(edges_v)
-            print(distances)
-
             self.assertEqual(loss, 4.0)
             self.assertAlmostEqual(np.sum(distances), 10, places=4)
