@@ -77,6 +77,14 @@ class TestUmLoss(unittest.TestCase):
             add_coordinates=False,
             name='um_test_simple_balanced')
 
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss)
+
+            self.assertEqual(loss, 2.0)
+            self.assertAlmostEqual(np.sum(distances), 8, places=4)
+
     def test_constrained(self):
 
         embedding = np.array(
