@@ -28,8 +28,7 @@ double c_um_loss_gradient(
 		clusters.make_set(i);
 
 		// ...and overlaps only with one label (gtSeg[i])
-		if (gtSeg[i] != 0)
-			overlaps[i][gtSeg[i]] = 1;
+		overlaps[i][gtSeg[i]] = 1;
 	}
 
 	// 1. Compute number of positive an negative pairs per edge.
@@ -61,6 +60,10 @@ double c_um_loss_gradient(
 				int64_t labelV = overlapsV.first;
 				double countU = overlapsU.second;
 				double countV = overlapsV.second;
+
+				// background pairs are neither positive nor negative
+				if (labelU == 0 && labelV == 0)
+					continue;
 
 				if (labelU == labelV)
 					ratioPos[i] += countU*countV;

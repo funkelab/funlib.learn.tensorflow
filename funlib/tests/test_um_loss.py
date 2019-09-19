@@ -85,6 +85,51 @@ class TestUmLoss(unittest.TestCase):
             self.assertEqual(loss, 2.0)
             self.assertAlmostEqual(np.sum(distances), 8, places=4)
 
+    def test_background(self):
+
+        embedding = np.array(
+            [[0, 1, 2],
+             [4, 5, 6],
+             [8, 9, 10]],
+            dtype=np.float32).reshape((1, 1, 3, 3))
+
+        segmentation = np.array(
+            [[1, 1, 1],
+             [0, 0, 0],
+             [3, 3, 3]],
+            dtype=np.int64).reshape((1, 3, 3))
+
+        # number of positive pairs: 2*3 = 6
+        # number of negative pairs: 3*3*3 = 27
+        # number of background pairs: 3
+        # total number of pairs (without background pairs): 33
+
+        # loss on positive pairs: 6*1 = 6
+        # loss on negative pairs: 27*2^2 = 108
+        # total loss = 114
+        # total loss per pair = 3.455
+        # total loss per pos pair = 1
+        # total loss per neg pair = 4
+
+        embedding = tf.constant(embedding, dtype=tf.float32)
+        segmentation = tf.constant(segmentation)
+
+        loss = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            alpha=4,
+            add_coordinates=False,
+            balance=False,
+            name='um_test_background')
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss)
+
+            self.assertAlmostEqual(loss, 3.4545, places=4)
+            self.assertAlmostEqual(np.sum(distances), 10, places=4)
+
     def test_mask(self):
 
         embedding = np.array(
