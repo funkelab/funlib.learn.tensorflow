@@ -209,6 +209,92 @@ class TestUmLoss(unittest.TestCase):
             self.assertAlmostEqual(loss, 2224.0, places=1)
             self.assertAlmostEqual(np.sum(distances), 107, places=4)
 
+    def test_constrained_mask(self):
+
+        embedding = np.array(
+            [[0, 1, 2],
+             [3, 4, 5],
+             [6, 7, 8]],
+            dtype=np.float32).reshape((1, 1, 3, 3))
+
+        segmentation = np.array(
+            [[1, 1, 1],
+             [2, 2, 2],
+             [3, 3, 3]],
+            dtype=np.int64).reshape((1, 3, 3))
+
+        embedding = tf.constant(embedding, dtype=tf.float32)
+        segmentation = tf.constant(segmentation)
+
+        # empty mask
+
+        mask = np.zeros((1, 3, 3), dtype=np.bool)
+        mask = tf.constant(mask)
+
+        loss = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            mask=mask,
+            constrained_emst=True,
+            alpha=2,
+            add_coordinates=False,
+            name='um_test_constrained_mask')
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss)
+
+            self.assertEqual(loss, 0.0)
+            self.assertAlmostEqual(np.sum(distances), 0, places=4)
+
+        # mask with only one point
+
+        mask = np.zeros((1, 3, 3), dtype=np.bool)
+        mask[0, 1, 1] = True
+        mask = tf.constant(mask)
+
+        loss = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            mask=mask,
+            constrained_emst=True,
+            alpha=2,
+            add_coordinates=False,
+            name='um_test_constrained_mask')
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss)
+
+            self.assertEqual(loss, 0.0)
+            self.assertAlmostEqual(np.sum(distances), 0, places=4)
+
+        # mask with two points
+
+        mask = np.zeros((1, 3, 3), dtype=np.bool)
+        mask[0, 1, 1] = True
+        mask[0, 0, 0] = True
+        mask = tf.constant(mask)
+
+        loss = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            mask=mask,
+            constrained_emst=True,
+            alpha=5,
+            add_coordinates=False,
+            name='um_test_constrained_mask')
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss)
+
+            self.assertEqual(loss, 1.0)
+            self.assertAlmostEqual(np.sum(distances), 4.0, places=4)
+
     def test_quadrupel_loss(self):
 
         embedding = np.array(
