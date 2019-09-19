@@ -242,11 +242,22 @@ def ultrametric_loss_op(
     where ``p`` and ``n`` are pairs of points with same and different labels in
     ``gt_seg``, respectively, and ``d(.)`` the ultrametric distance between the
     points. ``P`` and ``N`` are the total number of positive and negative
-    pairs. Pairs that have exactly one point with a label of 0 (background) are
-    considered negative pairs. Pairs that have both points with label 0 are
-    ignored. This is to express that we know that labelled areas are different
-    from background, but we don't know about the existence of other objects
-    within the background.
+    pairs.
+
+    There are two special labels for ``gt_seg``: 0 for background, and -1 for
+    foreground with an unknown label (e.g., for overlapping objects, where it
+    doesn't matter to which object the point gets assigned).
+
+    A pair is positive if both points have the same label >= 1, and negative if
+    both points have a different label >= 1.
+
+    In addition to that, pairs that have one point with a label of 0
+    (background) and one point with a foreground label (-1 or >=1) are
+    considered negative pairs. This is to express that we know that labelled
+    areas are different from background.
+
+    All other pairs are ignored, i.e., (-1, -1), (-1, >=1), and (0, 0). For
+    those pairs, we don't know whether they are part of the same object.
 
     Args:
 

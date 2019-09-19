@@ -61,14 +61,41 @@ double c_um_loss_gradient(
 				double countU = overlapsU.second;
 				double countV = overlapsV.second;
 
-				// background pairs are neither positive nor negative
-				if (labelU == 0 && labelV == 0)
-					continue;
+				// There are three possible label classes per point:
+				//
+				// * foreground labelled (n, m)
+				// * background (0)
+				// * ambiguous (-1)  (i.e., foreground, but unclear which label)
+				//
+				// In terms of positive/negative pairs, we get:
+				//
+				//  (n, n)       +
+				//  (n, m)       -
+				//  (n, 0)       -
+				//  (0, -1)      -
+				//
+				//  All other combinations are neither positive nor negative, 
+				//  and should not be counted:
+				//
+				//  (n, -1)      ?
+				//  (0, 0)       ?
+				//  (-1, -1)     ?
 
-				if (labelU == labelV)
-					ratioPos[i] += countU*countV;
-				else
+				if (labelU >= 1) {
+
+					// (n, n) -> positive
+					if (labelU == labelV)
+						ratioPos[i] += countU*countV;
+					// (n, m) -> negative
+					else if (labelV >= 1)
+						ratioNeg[i] += countU*countV;
+				}
+
+				// (n, 0) or (0, -1) -> negative
+				if ((labelU == 0) != (labelV == 0))
 					ratioNeg[i] += countU*countV;
+
+				// anything else -> ignored
 			}
 		}
 
