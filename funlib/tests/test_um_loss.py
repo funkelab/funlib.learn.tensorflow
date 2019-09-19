@@ -238,7 +238,7 @@ class TestUmLoss(unittest.TestCase):
             constrained_emst=True,
             alpha=2,
             add_coordinates=False,
-            name='um_test_simple_unbalanced')
+            name='um_test_constrained_mask')
 
         with tf.Session() as s:
 
@@ -261,7 +261,7 @@ class TestUmLoss(unittest.TestCase):
             constrained_emst=True,
             alpha=2,
             add_coordinates=False,
-            name='um_test_simple_unbalanced')
+            name='um_test_constrained_mask')
 
         with tf.Session() as s:
 
@@ -285,7 +285,7 @@ class TestUmLoss(unittest.TestCase):
             constrained_emst=True,
             alpha=5,
             add_coordinates=False,
-            name='um_test_simple_unbalanced')
+            name='um_test_constrained_mask')
 
         with tf.Session() as s:
 
