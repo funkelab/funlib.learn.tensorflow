@@ -254,6 +254,190 @@ class TestUmLoss(unittest.TestCase):
             self.assertAlmostEqual(loss, 2224.0, places=1)
             self.assertAlmostEqual(np.sum(distances), 107, places=4)
 
+    def test_ambiguous_unkown(self):
+
+        embedding = np.array(
+            [[0, 1]],
+            dtype=np.float32).reshape((1, 1, 1, 2))
+
+        segmentation = np.array(
+            [[-1, 0]],
+            dtype=np.int64).reshape((1, 1, 2))
+
+        # number of positive pairs: 0
+        # number of negative pairs: 1
+        # total number of pairs: 0
+
+        # loss on positive pairs: 0
+        # loss on negative pairs: 1
+        # total loss: 1
+
+        embedding = tf.constant(embedding, dtype=tf.float32)
+        segmentation = tf.constant(segmentation)
+
+        loss = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            alpha=2,
+            balance=True,
+            add_coordinates=False,
+            constrained_emst=True,
+            name='um_test_constrained')
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss)
+
+            self.assertAlmostEqual(loss, 1, places=3)
+            self.assertAlmostEqual(np.sum(distances), 1, places=4)
+
+        embedding = np.array(
+            [[0, 1]],
+            dtype=np.float32).reshape((1, 1, 1, 2))
+
+        segmentation = np.array(
+            [[0, -1]],
+            dtype=np.int64).reshape((1, 1, 2))
+
+        # number of positive pairs: 0
+        # number of negative pairs: 1
+        # total number of pairs: 0
+
+        # loss on positive pairs: 0
+        # loss on negative pairs: 1
+        # total loss: 1
+
+        embedding = tf.constant(embedding, dtype=tf.float32)
+        segmentation = tf.constant(segmentation)
+
+        loss = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            alpha=2,
+            balance=True,
+            add_coordinates=False,
+            constrained_emst=True,
+            name='um_test_constrained')
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss)
+
+            self.assertAlmostEqual(loss, 1, places=3)
+            self.assertAlmostEqual(np.sum(distances), 1, places=4)
+
+    def test_ambiguous_known(self):
+        embedding = np.array(
+            [[0, 1]],
+            dtype=np.float32).reshape((1, 1, 1, 2))
+
+        segmentation = np.array(
+            [[-1, 1]],
+            dtype=np.int64).reshape((1, 1, 2))
+
+        # number of positive pairs: 0
+        # number of negative pairs: 0
+        # total number of pairs: 0
+
+        # loss on positive pairs: 0
+        # loss on negative pairs: 0
+        # total loss: 0
+
+        embedding = tf.constant(embedding, dtype=tf.float32)
+        segmentation = tf.constant(segmentation)
+
+        loss = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            alpha=2,
+            balance=True,
+            add_coordinates=False,
+            constrained_emst=True,
+            name='um_test_constrained')
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss)
+
+            self.assertAlmostEqual(loss, 0, places=3)
+            self.assertAlmostEqual(np.sum(distances), 1, places=4)
+
+        embedding = np.array(
+            [[0, 1]],
+            dtype=np.float32).reshape((1, 1, 1, 2))
+
+        segmentation = np.array(
+            [[1, -1]],
+            dtype=np.int64).reshape((1, 1, 2))
+
+        # number of positive pairs: 0
+        # number of negative pairs: 0
+        # total number of pairs: 0
+
+        # loss on positive pairs: 0
+        # loss on negative pairs: 0
+        # total loss: 0
+
+        embedding = tf.constant(embedding, dtype=tf.float32)
+        segmentation = tf.constant(segmentation)
+
+        loss = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            alpha=2,
+            balance=True,
+            add_coordinates=False,
+            constrained_emst=True,
+            name='um_test_constrained')
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss)
+
+            self.assertAlmostEqual(loss, 0, places=3)
+            self.assertAlmostEqual(np.sum(distances), 1, places=4)
+
+    def test_ambiguous_ambiguous(self):
+        embedding = np.array(
+            [[0, 1]],
+            dtype=np.float32).reshape((1, 1, 1, 2))
+
+        segmentation = np.array(
+            [[-1, -1]],
+            dtype=np.int64).reshape((1, 1, 2))
+
+        # number of positive pairs: 0
+        # number of negative pairs: 0
+        # total number of pairs: 0
+
+        # loss on positive pairs: 0
+        # loss on negative pairs: 0
+        # total loss: 0
+
+        embedding = tf.constant(embedding, dtype=tf.float32)
+        segmentation = tf.constant(segmentation)
+
+        loss = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            alpha=2,
+            balance=True,
+            add_coordinates=False,
+            constrained_emst=True,
+            name='um_test_constrained')
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss)
+
+            self.assertAlmostEqual(loss, 0, places=3)
+            self.assertAlmostEqual(np.sum(distances), 1, places=4)
+
     def test_constrained_mask(self):
 
         embedding = np.array(
