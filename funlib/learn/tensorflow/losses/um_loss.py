@@ -36,6 +36,9 @@ def get_constrained_emst(embedding, labels):
 
     embedding = embedding.astype(np.float64)
     components = np.unique(labels)
+    if len(components) <= 1:
+        logger.warn("can't compute constrained EMST for 1 or fewer components")
+        return get_emst(embedding)
     num_points = embedding.shape[0]
     indices = np.arange(num_points)
 
