@@ -438,6 +438,129 @@ class TestUmLoss(unittest.TestCase):
             self.assertAlmostEqual(loss, 0, places=3)
             self.assertAlmostEqual(np.sum(distances), 1, places=4)
 
+    def test_large_example(self):
+        """
+        nodes:
+        [[a, b, c],
+         [d, e, f],
+         [g, h, i],
+         [j, k, l]]
+        mst edges (unconstrained), dist, ratio_pos, ratio_neg
+        de,                        0     0          0
+        ef,                        0     1          0
+        jk,                        0     0          0
+        ab,                        0.5   0          1
+        bc,                        0.5   1          1
+        gh,                        1     0          0
+        hi,                        1     1          0
+        kl,                        1     2          0
+        dj,                        1.5   0          9
+        fj,                        2     0          13
+        gl,                        2     0          24
+        mst edges (constrained),   dist, ratio_pos, ratio_neg
+        de,                        0     1          0
+        jk,                        0     1          0
+        ac,                        1     1          0
+        gh,                        1     2          0
+        hi,                        1     0          0
+        kl,                        1     0          0
+        bk,                        4     0          0
+        ef,                        0     0          0
+        ab,                        0.5   0          8
+        dj,                        1.5   0          16
+        gl,                        2     0          24
+        """
+
+        embedding = np.array(
+            [[0.5, 1, 1.5],
+             [3.5, 3.5, 3.5],
+             [8, 9, 10],
+             [5, 5, 6]],
+            dtype=np.float32).reshape((1, 1, 4, 3))
+        embedding = tf.constant(embedding, dtype=tf.float32)
+        
+        segmentation = np.array(
+            [[1, 0, 1],
+             [2, 2, -1],
+             [3, 3, 3],
+             [0, 0, 0]],
+            dtype=np.int64).reshape((1, 4, 3))
+        segmentation = tf.constant(segmentation)
+
+        loss_unbalanced_unconstrained = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            constrained_emst=False,
+            balance=False,
+            alpha=2,
+            add_coordinates=False,
+            name='um_test_unbalanced_unconstrained')
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss_unbalanced_unconstrained)
+
+            self.assertAlmostEqual(loss, 10/53, places=4)
+            self.assertAlmostEqual(np.sum(distances), 9.5, places=4)
+
+        loss_unbalanced_constrained = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            constrained_emst=True,
+            balance=False,
+            alpha=2,
+            add_coordinates=False,
+            name="um_test_unbalanced_constrained"
+        )
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss_unbalanced_constrained)
+
+            self.assertAlmostEqual(loss, 26/53, places=4)
+            self.assertAlmostEqual(np.sum(distances), 12, places=4)
+
+        loss_balanced_unconstrained = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            constrained_emst=False,
+            balance=True,
+            alpha=2,
+            add_coordinates=False,
+            name="um_test_balanced_unconstrained"
+        )
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss_balanced_unconstrained)
+
+            self.assertAlmostEqual(loss, 0.790625, places=4)
+            self.assertAlmostEqual(np.sum(distances), 9.5, places=4)
+
+        loss_balanced_constrained = ultrametric_loss_op(
+            embedding,
+            segmentation,
+            constrained_emst=True,
+            balance=True,
+            alpha=2,
+            add_coordinates=False,
+            name="um_test_balanced_constrained"
+        )
+
+        with tf.Session() as s:
+
+            s.run(tf.global_variables_initializer())
+            loss, emst, edges_u, edges_v, distances = s.run(loss_balanced_constrained)
+
+            self.assertAlmostEqual(loss, 1.258333, places=4)
+            self.assertAlmostEqual(np.sum(distances), 12, places=4)
+
+        
+        
+
     def test_constrained_mask(self):
 
         embedding = np.array(
