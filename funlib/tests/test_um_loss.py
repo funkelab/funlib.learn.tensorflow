@@ -478,7 +478,7 @@ class TestUmLoss(unittest.TestCase):
              [5, 5, 6]],
             dtype=np.float32).reshape((1, 1, 4, 3))
         embedding = tf.constant(embedding, dtype=tf.float32)
-        
+
         segmentation = np.array(
             [[1, 0, 1],
              [2, 2, -1],
@@ -499,7 +499,9 @@ class TestUmLoss(unittest.TestCase):
         with tf.Session() as s:
 
             s.run(tf.global_variables_initializer())
-            loss, emst, edges_u, edges_v, distances = s.run(loss_unbalanced_unconstrained)
+            loss, emst, edges_u, edges_v, distances = s.run(
+                loss_unbalanced_unconstrained
+            )
 
             self.assertAlmostEqual(loss, 10/53, places=4)
             self.assertAlmostEqual(np.sum(distances), 9.5, places=4)
@@ -517,7 +519,9 @@ class TestUmLoss(unittest.TestCase):
         with tf.Session() as s:
 
             s.run(tf.global_variables_initializer())
-            loss, emst, edges_u, edges_v, distances = s.run(loss_unbalanced_constrained)
+            loss, emst, edges_u, edges_v, distances = s.run(
+                loss_unbalanced_constrained
+            )
 
             self.assertAlmostEqual(loss, 26/53, places=4)
             self.assertAlmostEqual(np.sum(distances), 12, places=4)
@@ -535,7 +539,9 @@ class TestUmLoss(unittest.TestCase):
         with tf.Session() as s:
 
             s.run(tf.global_variables_initializer())
-            loss, emst, edges_u, edges_v, distances = s.run(loss_balanced_unconstrained)
+            loss, emst, edges_u, edges_v, distances = s.run(
+                loss_balanced_unconstrained
+            )
 
             self.assertAlmostEqual(loss, 0.790625, places=4)
             self.assertAlmostEqual(np.sum(distances), 9.5, places=4)
@@ -553,13 +559,12 @@ class TestUmLoss(unittest.TestCase):
         with tf.Session() as s:
 
             s.run(tf.global_variables_initializer())
-            loss, emst, edges_u, edges_v, distances = s.run(loss_balanced_constrained)
+            loss, emst, edges_u, edges_v, distances = s.run(
+                loss_balanced_constrained
+            )
 
             self.assertAlmostEqual(loss, 1.258333, places=4)
             self.assertAlmostEqual(np.sum(distances), 12, places=4)
-
-        
-        
 
     def test_constrained_mask(self):
 
