@@ -11,7 +11,8 @@ def conv_pass(
         activation='relu',
         name='conv_pass',
         fov=(1, 1, 1),
-        voxel_size=(1, 1, 1)):
+        voxel_size=(1, 1, 1),
+        padding='valid'):
     '''Create a convolution pass::
 
         f_in --> f_1 --> ... --> f_n
@@ -54,6 +55,10 @@ def conv_pass(
 
             Size of a voxel in the input data, in physical units.
 
+        padding:
+
+            'valid' or 'same', controls the padding on the convolution
+
     Returns:
 
         (fmaps, fov):
@@ -93,7 +98,7 @@ def conv_pass(
             inputs=fmaps,
             filters=num_fmaps,
             kernel_size=kernel_size,
-            padding='valid',
+            padding=padding,
             data_format='channels_first',
             activation=activation,
             name=name + '_%i' % i)
