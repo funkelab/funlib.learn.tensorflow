@@ -34,28 +34,91 @@ def add_summaries(net, sums):
     sums.append(tf.summary.histogram(name + '/bias', vars[1]))
 
 
-def vgg(fmaps_in,
-        is_training,
-        voxel_size,
+def vgg(f_in,
         kernel_sizes,
-        downsample_factors,
-        fmap_inc_factors,
         num_fmaps,
+        fmap_inc_factors,
+        downsample_factors,
         fc_size,
         num_classes,
-        padding='same',
+        is_training,
         activation='relu',
+        voxel_size=(1, 1, 1),
+        padding='same',
         batch_norm=True,
         global_pool=True):
+
     ''' Create a VGG-Net:
+
+    Args:
+        f_in:
+
+            The input tensor of shape ``(batch_size, channels, [length,] depth,
+            height, width)``.
+
+        kernel_sizes:
+
+            Sizes of the kernels to use. Forwarded to conv_pass (see u-net).
+
+        num_fmaps:
+
+            The number of feature maps to produce with each convolution.
+
+        fmap_inc_factors:
+
+            By how much to multiply the number of feature maps between layers.
+            If layer 0 has ``k`` feature maps, layer ``l`` will have
+            ``k*fmap_inc_factor**l``.
+
+        downsample_factors:
+
+            List of lists ``[z, y, x]`` to use to down-sample the
+            feature maps between layers.
+
+        fc_size:
+
+            Size of fully connected layer
+
+        num_classes:
+
+            Number of output classes
+
+        is_training:
+
+            A boolean or placeholder tensor indicating whether or not the
+            network is training. Will use dropout and batch norm when
+            this is true, but not when false.
+
+        activation:
+
+            Which activation to use after a convolution. Accepts the name of
+            any tensorflow activation function (e.g., ``relu`` for
+            ``tf.nn.relu``).
+
+        voxel_size:
+
+            Size of a voxel in the input data, in physical units.
+
+        padding:
+
+            'valid' or 'same', controls the padding on the convolution
+
+        batch_norm:
+
+            Flag indicating whether or not to do batch normalization.
+            Default is true.
+
+        global_pool:
+
+            Flag indicating whether or not to do global average pooling.
+            Default is true.
+
     '''
     logger.info("Creating VGG-Net")
     num_var_start = get_number_of_tf_variables()
 
     fov = (1, 1, 1)
-    voxel_size = voxel_size
-    num_fmaps = num_fmaps
-    net = fmaps_in
+    net = f_in
     sums = []
     for i, kernel_size in enumerate(kernel_sizes):
         logger.info("%s %s %s %s %s", net, kernel_size, num_fmaps,
