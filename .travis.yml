@@ -17,7 +17,7 @@ before_install:
   - conda info -a
   - conda create -q -n funlib python=$TRAVIS_PYTHON_VERSION
   - source activate funlib
-  - conda install -c conda-forge tensorflow
+  - conda install -c conda-forge tensorflow=1.14
 
 install:
   - make install-dev
