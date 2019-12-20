@@ -1,4 +1,5 @@
 from .conv4d import conv4d
+from .utils import get_number_of_tf_variables
 import math
 import numpy as np
 import tensorflow as tf
@@ -493,19 +494,6 @@ def crop_to_factor(fmaps_in, factor, kernel_sizes):
         fmaps = fmaps_in
 
     return fmaps
-
-
-def get_number_of_tf_variables():
-    '''Returns number of trainable variables in tensorflow graph collection'''
-    total_parameters = 0
-    for variable in tf.trainable_variables():
-        # shape is an array of tf.Dimension
-        shape = variable.get_shape()
-        variable_parameters = 1
-        for dim in shape:
-            variable_parameters *= dim.value
-        total_parameters += variable_parameters
-    return total_parameters
 
 
 def unet(

@@ -3,21 +3,9 @@ import logging
 import tensorflow as tf
 
 from funlib.learn.tensorflow.models.unet import downsample, conv_pass
+from .utils import get_number_of_tf_variables
 
 logger = logging.getLogger(__name__)
-
-
-def get_number_of_tf_variables():
-    '''Returns number of trainable variables in tensorflow graph collection'''
-    total_parameters = 0
-    for variable in tf.trainable_variables():
-        # shape is an array of tf.Dimension
-        shape = variable.get_shape()
-        variable_parameters = 1
-        for dim in shape:
-            variable_parameters *= dim.value
-        total_parameters += variable_parameters
-    return total_parameters
 
 
 def global_average_pool(net):
@@ -35,6 +23,7 @@ def add_summaries(net, sums):
 
 
 def vgg(f_in,
+        *,  # this indicates that all following arguments are keyword arguments
         kernel_sizes,
         num_fmaps,
         fmap_inc_factors,
