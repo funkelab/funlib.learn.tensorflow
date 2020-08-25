@@ -121,6 +121,9 @@ def conv4d(
     else:
         l_o = l_i
 
+    if b is None:
+        b = -1
+
     # output tensors for each 3D frame
     frame_results = [None]*l_o
 
