@@ -224,6 +224,196 @@ def conv_pass(
     return fmaps, fov
 
 
+def basic_res_block(fmaps_in,
+                    num_fmaps,
+                    num_fmaps_out,
+                    activation='relu',
+                    padding='same',
+                    strides=1,
+                    is_training=None,
+                    use_batchnorm=False,
+                    is_first_block=False,
+                    name='basic_res_block',
+                    fov=(1, 1, 1),
+                    voxel_size=(1, 1, 1)):
+    '''Create a basic residual block (preact, resnetv2):
+    Args:
+        fmaps_in:
+            The input tensor of shape
+            ``(batch_size, channels, [length,] depth, height, width)``.
+        num_fmaps:
+            The number of feature maps to produce with each convolution.
+        fov:
+            Field of view of fmaps_in, in physical units.
+        name:
+            Base name for the conv layer.
+    Returns:
+        (fmaps, fov):
+            The feature maps after the last convolution, and a tuple
+            representing the field of view
+    '''
+
+    fmaps = fmaps_in
+    if use_batchnorm:
+        conv_activation = None
+        use_bias = False
+    else:
+        conv_activation = activation
+        use_bias = True
+
+    kernel_sizes = [3, 3]
+    for i, kernel_size in enumerate(kernel_sizes):
+        if use_batchnorm and not is_first_block:
+            fmaps = tf.layers.batch_normalization(
+                fmaps,
+                axis=1,
+                training=is_training,
+                epsilon=1.0001e-5,
+                name=name + '_%i_bn' % i)
+            logger.info("%s", fmaps)
+            fmaps = tf.keras.activations.get(activation)(fmaps)
+                # fmaps, name=name + '_%i_act' % i)
+            logger.info("%s", fmaps)
+
+        fmaps, fov = conv(fmaps,
+                          num_fmaps if i == 0 else num_fmaps_out,
+                          kernel_size,
+                          activation=activation,
+                          padding=padding,
+                          use_bias=use_bias,
+                          # strides=strides if i == 0 else 1,
+                          strides=strides if i == 1 else 1,
+                          name=name + "_%i" % i,
+                          fov=fov, voxel_size=voxel_size,)
+
+    return fmaps, fov
+
+
+def bottleneck_res_block(fmaps_in,
+                         num_fmaps,
+                         num_fmaps_out,
+                         activation='relu',
+                         padding='same',
+                         strides=1,
+                         is_training=None,
+                         use_batchnorm=False,
+                         is_first_block=False,
+                         name='bottleneck_res_block',
+                         fov=(1, 1, 1),
+                         voxel_size=(1, 1, 1)):
+    '''Create a bottleneck residual block (preact, resnetv2):
+    Args:
+        fmaps_in:
+            The input tensor of shape
+            ``(batch_size, channels, [length,] depth, height, width)``.
+        num_fmaps:
+            The number of feature maps to use in inner convolution.
+        num_fmaps_out:
+            The number of feature maps to output.
+        activation:
+            Which activation to use after a convolution. Accepts the name of
+            any tensorflow activation function (e.g., ``relu`` for
+            ``tf.nn.relu``).
+
+        padding:
+            Which kind of padding to use, 'valid' or 'same' (case-insensitive)
+        strides:
+            Specifiy strides of the convolution
+        is_training:
+            Boolean or tf.placeholder to set batchnorm and dropout to
+            training or test mode
+        use_batchnorm:
+            Whether to use batch norm layers after convolution
+        is_first_block:
+            Whether this is the first block in the network
+        name:
+            Base name for the conv layer.
+        fov:
+            Field of view of fmaps_in, in physical units.
+        voxel_size:
+            Voxel size of the input feature maps. Used to compute the voxel
+            size of the output.
+    Returns:
+        (fmaps, fov):
+            The feature maps after the last convolution, and a tuple
+            representing the field of view
+    '''
+
+    fmaps = fmaps_in
+    if use_batchnorm:
+        conv_activation = None
+        use_bias = False
+    else:
+        conv_activation = activation
+        use_bias = True
+
+    # bottleneck in
+    if use_batchnorm and not is_first_block:
+        fmaps = tf.layers.batch_normalization(
+            fmaps,
+            axis=1,
+            training=is_training,
+            epsilon=1.0001e-5,
+            name=name + '_in_bn')
+        logger.info("%s", fmaps)
+        fmaps = tf.keras.activations.get(activation)(fmaps)
+            # fmaps, name=name + '_in_act')
+        logger.info("%s", fmaps)
+
+    fmaps, fov = conv(
+        fmaps, num_fmaps, 1,
+        activation=activation,
+        padding=padding,
+        use_bias=use_bias,
+        strides=1,
+        name=name + '_in_conv',
+        fov=fov, voxel_size=voxel_size)
+
+    # bottleneck
+    if use_batchnorm:
+        fmaps = tf.layers.batch_normalization(
+            fmaps,
+            axis=1,
+            training=is_training,
+            epsilon=1.0001e-5,
+            name=name + '_bn')
+        logger.info("%s", fmaps)
+        fmaps = tf.keras.activations.get(activation)(fmaps)
+            # fmaps, name=name + '_act')
+        logger.info("%s", fmaps)
+
+    fmaps, fov = conv(fmaps, num_fmaps, 3,
+                      activation=activation,
+                      padding=padding,
+                      use_bias=use_bias,
+                      strides=strides,
+                      name=name + "_conv",
+                      fov=fov, voxel_size=voxel_size,)
+
+    # bottleneck out
+    if use_batchnorm:
+        fmaps = tf.layers.batch_normalization(
+            fmaps,
+            axis=1,
+            training=is_training,
+            epsilon=1.0001e-5,
+            name=name + '_out_bn')
+        logger.info("%s", fmaps)
+        fmaps = tf.keras.activations.get(activation)(fmaps)
+            # fmaps, name=name + '_out_act')
+        logger.info("%s", fmaps)
+
+    fmaps, fov = conv(fmaps, num_fmaps_out, 1,
+                      activation=activation,
+                      padding=padding,
+                      use_bias=use_bias,
+                      strides=1,
+                      name=name + '_out_conv',
+                      fov=fov, voxel_size=voxel_size)
+
+    return fmaps, fov
+
+
 def downsample(
         fmaps_in,
         factors,
