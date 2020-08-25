@@ -15,15 +15,22 @@ def unet(
         num_fmaps,
         fmap_inc_factors,
         downsample_factors,
+        fmap_dec_factors=None,
         kernel_size_down=None,
         kernel_size_up=None,
         activation='relu',
+        padding='valid',
+        upsampling='transposed_conv',
+        constant_upsample=None,
+        is_training=None,
+        use_batchnorm=False,
+        shortcut=False,
         layer=0,
         fov=(1, 1, 1),
         voxel_size=(1, 1, 1),
         num_fmaps_out=None,
         num_heads=1,
-        constant_upsample=False):
+        return_summaries=False):
     '''Create a U-Net::
 
         f_in --> f_left --------------------------->> f_right--> f_out
@@ -60,11 +67,17 @@ def unet(
             number of output feature maps. Stored in the ``channels``
             dimension.
 
-        fmap_inc_factors:
+        fmap_inc_factors (``int`` or list of ``int``):
 
             By how much to multiply the number of feature maps between layers.
             If layer 0 has ``k`` feature maps, layer ``l`` will have
             ``k*fmap_inc_factor**l``.
+
+        fmap_dec_factors (``int`` or list of ``int``):
+
+            By how much to divide the number of feature maps between layers
+            in the decoder path.
+            If not set, reverse of fmap_inc_factors will be used.
 
         downsample_factors:
 
@@ -77,7 +90,7 @@ def unet(
             determines the number of convolutional layers in the corresponding
             level of the build on the left side. Kernel sizes can be given as
             tuples or integer. If not given, each convolutional pass will
-            consist of two 3x3x3 convolutions.
+            consist of two (3x)3x3 convolutions.
 
         kernel_size_up (optional):
 
@@ -85,7 +98,7 @@ def unet(
             determines the number of convolutional layers in the corresponding
             level of the build on the right side. Within one of the lists going
             from left to right. Kernel sizes can be given as tuples or integer.
-            If not given, each convolutional pass will consist of two 3x3x3
+            If not given, each convolutional pass will consist of two (3x)3x3
             convolutions.
 
         activation:
@@ -93,6 +106,38 @@ def unet(
             Which activation to use after a convolution. Accepts the name of
             any tensorflow activation function (e.g., ``relu`` for
             ``tf.nn.relu``).
+
+        padding (``string``):
+
+            Which kind of padding to use, 'valid' or 'same' (case-insensitive)
+        upsampling (``string``):
+
+            Type of upsampling used, one of
+            ['transposed_conv', 'resize_conv', 'uniform_transposed_conv']
+            transposed_conv: use a normal transposed convolution
+            resize_conv: replicate each pixel factors times followed
+            by a 1x1 conv
+            uniform_transposed_conv: use a transposed convolution with
+            a factors sized filter with a single, learnable value at all
+            positions
+        constant_upsample (``bool``, optional):
+
+            Whether to restrict the transpose convolution kernels to be
+            constant values. This might help to reduce checker board artifacts.
+            (deprecated, use upsampling)
+
+        is_training:
+
+            Boolean or tf.placeholder to set batchnorm and dropout to
+            training or test mode
+
+        use_batchnorm:
+
+            Whether to use batch norm layers after convolution
+
+        shortcut:
+
+            Whether to add residual shortcut/skip connections
 
         layer:
 
@@ -116,6 +161,11 @@ def unet(
             Number of decoders. The resulting U-Net has one single encoder
             path and num_heads decoder paths. This is useful in a multi-task
             learning context.
+
+        return_summaries:
+
+            Whether to return tf/tensorboard summaries
+
     '''
     num_var_start = get_number_of_tf_variables()
     prefix = "    "*layer
@@ -142,6 +192,10 @@ def unet(
         kernel_sizes=kernel_size_down[layer],
         num_fmaps=num_fmaps,
         activation=activation,
+        padding=padding,
+        is_training=is_training,
+        use_batchnorm=use_batchnorm,
+        shortcut=shortcut,
         name='unet_layer_%i_left' % layer,
         fov=fov,
         voxel_size=voxel_size)
@@ -164,7 +218,8 @@ def unet(
     g_in, voxel_size = downsample(
         f_left,
         downsample_factors[layer],
-        'unet_down_%i_to_%i' % (layer, layer + 1),
+        padding=padding,
+        name='unet_down_%i_to_%i' % (layer, layer + 1),
         voxel_size=voxel_size)
 
     print(prefix + 'number of variables added: %i, '
@@ -172,19 +227,31 @@ def unet(
     # recursive U-net
     g_outs, fov, voxel_size = unet(
         g_in,
-        num_fmaps=num_fmaps*fmap_inc_factors[layer],
+        num_fmaps=int(num_fmaps*fmap_inc_factors[layer]),
         fmap_inc_factors=fmap_inc_factors,
         downsample_factors=downsample_factors,
+        fmap_dec_factors=fmap_dec_factors,
         kernel_size_down=kernel_size_down,
         kernel_size_up=kernel_size_up,
         activation=activation,
+        padding=padding,
+        upsampling=upsampling,
+        constant_upsample=constant_upsample,
+        is_training=is_training,
+        use_batchnorm=use_batchnorm,
+        shortcut=shortcut,
         layer=layer+1,
         fov=fov,
         voxel_size=voxel_size,
-        num_heads=num_heads,
-        constant_upsample=constant_upsample)
+        num_heads=num_heads)
     if num_heads == 1:
         g_outs = [g_outs]
+
+    if fmap_dec_factors is not None:
+        num_fmaps_up = int(num_fmaps * np.prod(fmap_inc_factors[layer:])
+                           / np.prod(fmap_dec_factors[layer:]))
+    else:
+        num_fmaps_up = num_fmaps
 
     # For Multi-Headed UNet: Create this path multiple times.
     f_outs = []
@@ -198,8 +265,10 @@ def unet(
             g_out_upsampled, voxel_size = upsample(
                 g_out,
                 downsample_factors[layer],
-                num_fmaps,
+                num_fmaps_up,
+                upsampling=upsampling,
                 activation=activation,
+                padding=padding,
                 name='unet_up_%i_to_%i' % (layer + 1, layer),
                 voxel_size=voxel_size,
                 constant_upsample=constant_upsample)
@@ -238,23 +307,33 @@ def unet(
             print(prefix + "f_right: " + str(f_right.shape))
 
             if layer == 0 and num_fmaps_out is not None:
-                num_fmaps = max(num_fmaps_out, num_fmaps)
+                num_fmaps_up = max(num_fmaps_out, num_fmaps_up)
 
             # convolve
             f_out, fov = conv_pass(
                 f_right,
                 kernel_sizes=kernel_size_up[layer],
-                num_fmaps=num_fmaps,
+                num_fmaps=num_fmaps_up,
+                activation=activation,
+                padding=padding,
+                is_training=is_training,
+                use_batchnorm=use_batchnorm,
+                shortcut=shortcut,
                 name='unet_layer_%i_right' % (layer),
                 fov=fov,
                 voxel_size=voxel_size)
 
-            print(prefix + "f_out: " + str(f_out.shape))
+            logger.info(prefix + "f_out: %s", f_out.shape)
             f_outs.append(f_out)
             num_var_end = get_number_of_tf_variables()
             var_added = num_var_end - num_var_start
-            print(prefix + 'number of variables added: %i, '
-                           'new total: %i' % (var_added, num_var_end))
+            logger.info(prefix + 'number of variables added: %i, '
+                        'new total: %i', var_added, num_var_end)
     if num_heads == 1:
         f_outs = f_outs[0]  # Backwards compatibility.
+
+    if return_summaries:
+        summaries = add_summaries()
+        return f_outs, fov, voxel_size, summaries
+
     return f_outs, fov, voxel_size
