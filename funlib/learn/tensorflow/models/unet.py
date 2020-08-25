@@ -169,8 +169,8 @@ def unet(
     '''
     num_var_start = get_number_of_tf_variables()
     prefix = "    "*layer
-    print(prefix + "Creating U-Net layer %i" % layer)
-    print(prefix + "f_in: " + str(fmaps_in.shape))
+    logger.info(prefix + "Creating U-Net layer %i", layer)
+    logger.info(prefix + "f_in: %s", fmaps_in.shape)
     if isinstance(fmap_inc_factors, int):
         fmap_inc_factors = [fmap_inc_factors]*len(downsample_factors)
 
@@ -206,12 +206,12 @@ def unet(
     num_var_end = get_number_of_tf_variables()
     var_added = num_var_end - num_var_start
     if bottom_layer:
-        print(prefix + "bottom layer")
-        print(prefix + "f_out: " + str(f_left.shape))
+        logger.info(prefix + "bottom layer")
+        logger.info(prefix + "f_out: %s", f_left.shape)
         if num_heads > 1:
             f_left = [f_left] * num_heads
-        print(prefix + 'number of variables added: %i, '
-                       'new total: %i' % (var_added, num_var_end))
+        logger.info(prefix + 'number of variables added: %i, '
+                    'new total: %i', var_added, num_var_end)
         return f_left, fov, voxel_size
 
     # downsample
@@ -222,8 +222,8 @@ def unet(
         name='unet_down_%i_to_%i' % (layer, layer + 1),
         voxel_size=voxel_size)
 
-    print(prefix + 'number of variables added: %i, '
-                   'new total: %i' % (var_added, num_var_end))
+    logger.info(prefix + 'number of variables added: %i, '
+                'new total: %i', var_added, num_var_end)
     # recursive U-net
     g_outs, fov, voxel_size = unet(
         g_in,
@@ -259,8 +259,8 @@ def unet(
         num_var_start = get_number_of_tf_variables()
         with tf.variable_scope('decoder_%i_layer_%i' % (head_num, layer)):
             if num_heads > 1:
-                print(prefix + 'head number: %i' % head_num)
-            print(prefix + "g_out: " + str(g_out.shape))
+                logger.info(prefix + 'head number: %i', head_num)
+            logger.info(prefix + "g_out: %s", g_out.shape)
             # upsample
             g_out_upsampled, voxel_size = upsample(
                 g_out,
@@ -273,7 +273,8 @@ def unet(
                 voxel_size=voxel_size,
                 constant_upsample=constant_upsample)
 
-            print(prefix + "g_out_upsampled: " + str(g_out_upsampled.shape))
+            logger.info(prefix + "g_out_upsampled: %s",
+                        g_out_upsampled.shape)
 
             # ensure translation equivariance with stride of product of
             # previous downsample factors
@@ -290,21 +291,20 @@ def unet(
                 factor=factor_product,
                 kernel_sizes=kernel_size_up[layer])
 
-            print(
-                prefix + "g_out_upsampled_cropped: " +
-                str(g_out_upsampled.shape))
+            logger.info(prefix + "g_out_upsampled_cropped: %s",
+                        g_out_upsampled.shape)
 
             # copy-crop
             f_left_cropped = crop_spatial_temporal(
                 f_left,
                 g_out_upsampled.get_shape().as_list())
 
-            print(prefix + "f_left_cropped: " + str(f_left_cropped.shape))
+            logger.info(prefix + "f_left_cropped: %s", f_left_cropped.shape)
 
             # concatenate along channel dimension
             f_right = tf.concat([f_left_cropped, g_out_upsampled], 1)
 
-            print(prefix + "f_right: " + str(f_right.shape))
+            logger.info(prefix + "f_right: %s", f_right.shape)
 
             if layer == 0 and num_fmaps_out is not None:
                 num_fmaps_up = max(num_fmaps_out, num_fmaps_up)
