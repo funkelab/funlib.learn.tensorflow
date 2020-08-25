@@ -3,6 +3,22 @@ import math
 import tensorflow as tf
 
 
+def add_summaries():
+    summaries = []
+
+    # idea: get histogram of activations, not working yet
+    # ops = tf.get_default_graph().get_operations()
+    # for o in ops:
+    #         summaries.append(tf.summary.histogram(o.name, o))
+
+    vars = tf.trainable_variables()
+    for v in vars:
+        summaries.append(
+            tf.summary.histogram(v.name.replace(":", "_"), v))
+
+    return summaries
+
+
 def get_number_of_tf_variables():
     '''Returns number of trainable variables in tensorflow graph collection'''
     total_parameters = 0
