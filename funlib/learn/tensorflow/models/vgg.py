@@ -1,28 +1,17 @@
 import logging
 
+import numpy as np
 import tensorflow as tf
 
-from funlib.learn.tensorflow.models.unet import downsample, conv_pass
-from .utils import get_number_of_tf_variables
+from .layers import conv, conv_pass, downsample
+from .utils import (add_summaries,
+                    get_number_of_tf_variables,
+                    global_average_pool)
 
 logger = logging.getLogger(__name__)
 
 
-def global_average_pool(net):
-    return tf.reduce_mean(net, [2, 3, 4], keep_dims=True,
-                          name='global_avg_pool')
-
-
-def add_summaries(net, sums):
-    sums.append(tf.summary.histogram(net.op.name, net))
-    name = net.op.name.split("/")[0]
-    vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES,
-                             name)
-    sums.append(tf.summary.histogram(name + '/kernel', vars[0]))
-    sums.append(tf.summary.histogram(name + '/bias', vars[1]))
-
-
-def vgg(f_in,
+def vgg(fmaps_in,
         *,  # this indicates that all following arguments are keyword arguments
         kernel_sizes,
         num_fmaps,
@@ -30,24 +19,29 @@ def vgg(f_in,
         downsample_factors,
         fc_size,
         num_classes,
-        is_training,
         activation='relu',
-        voxel_size=(1, 1, 1),
         padding='same',
-        batch_norm=True,
-        global_pool=True):
+        make_iso=False,
+        is_training=None,
+        use_batchnorm=False,
+        use_conv4d=False,
+        global_pool=True,
+        dropout=False,
+        voxel_size=(1, 1, 1)):
 
     ''' Create a VGG-Net:
 
     Args:
-        f_in:
+        fmaps_in:
 
             The input tensor of shape ``(batch_size, channels, [length,] depth,
             height, width)``.
 
         kernel_sizes:
 
-            Sizes of the kernels to use. Forwarded to conv_pass (see u-net).
+            List of lists of kernel sizes. The number of sizes in a list
+            determines the number of convolutional layers in the corresponding
+            level of the build. Kernel sizes can be given as tuples or integer.
 
         num_fmaps:
 
@@ -67,16 +61,11 @@ def vgg(f_in,
         fc_size:
 
             Size of fully connected layer
+            (implementation-wise a 1x1 conv layer is used)
 
         num_classes:
 
             Number of output classes
-
-        is_training:
-
-            A boolean or placeholder tensor indicating whether or not the
-            network is training. Will use dropout and batch norm when
-            this is true, but not when false.
 
         activation:
 
@@ -92,23 +81,40 @@ def vgg(f_in,
 
             'valid' or 'same', controls the padding on the convolution
 
-        batch_norm:
+        make_iso:
 
-            Flag indicating whether or not to do batch normalization.
-            Default is true.
+            For anisotropic 3d data, don't downsample z in the beginning,
+            until voxel_size is roughly isotropic
+
+        is_training:
+
+            A boolean or placeholder tensor indicating whether or not the
+            network is training. Will use dropout and batch norm when
+            this is true, but not when false.
+
+        use_batchnorm:
+
+            Whether to use batch norm layers after convolution
+
+        use_conv4d:
+
+            Whether to interpret the input channels as temporal data
+            and use conv4d
 
         global_pool:
 
             Flag indicating whether or not to do global average pooling.
-            Default is true.
 
     '''
     logger.info("Creating VGG-Net")
     num_var_start = get_number_of_tf_variables()
 
     fov = (1, 1, 1)
-    net = f_in
-    sums = []
+    voxel_size = np.array(voxel_size[-3:])
+    net = fmaps_in
+
+    if use_conv4d:
+        net = tf.expand_dims(net, 1)
     for i, kernel_size in enumerate(kernel_sizes):
         logger.info("%s %s %s %s %s", net, kernel_size, num_fmaps,
                     downsample_factors[i],
@@ -116,53 +122,83 @@ def vgg(f_in,
         net, fov = conv_pass(net,
                              kernel_sizes=kernel_size,
                              num_fmaps=num_fmaps,
-                             padding=padding,
                              activation=activation,
+                             padding=padding,
+                             is_training=is_training,
+                             use_batchnorm=use_batchnorm,
                              name='conv_%i' % i,
                              fov=fov,
                              voxel_size=voxel_size)
-        add_summaries(net, sums)
 
         num_fmaps *= fmap_inc_factors[i]
-        if batch_norm:
-            net = tf.layers.batch_normalization(net, training=is_training)
+
+        shape = net.get_shape().as_list()
+        factors = downsample_factors[i]
+        if make_iso and isinstance(factors, int) \
+           and factors > 1 and shape[-3] * 2 <= shape[-1]:
+            factors = [factors] * (len(shape)-2)
+            factors[0] = 1
 
         net, voxel_size = downsample(
-                net,
-                downsample_factors[i],
-                'pool_%i' % i,
-                voxel_size=voxel_size)
+            net,
+            factors=factors,
+            padding=padding,
+            name='pool_%i' % i,
+            voxel_size=voxel_size)
 
-    logger.info(net)
-    num_var_conv = get_number_of_tf_variables()
-    var_added = num_var_conv - num_var_start
-    logger.info('number of variables added (conv part): %i, '
-                'new total: %i', var_added, num_var_conv)
+    logger.info("%s", net)
+    num_var = get_number_of_tf_variables()
+    num_var_conv = num_var - num_var_start
 
     net, fov = conv_pass(
-            net, [1], fc_size, padding=padding,
-            name='conv_fc7', fov=fov, voxel_size=voxel_size)
-    add_summaries(net, sums)
+        net, [1], fc_size,
+        activation=activation,
+        padding=padding,
+        is_training=is_training,
+        use_batchnorm=use_batchnorm,
+        name='conv_fc1',
+        fov=fov, voxel_size=voxel_size)
 
-    logger.info(net)
+    if dropout:
+        net = tf.layers.dropout(net, rate=dropout,training=is_training)
+        logger.info("%s", net)
+
     if global_pool:
         net = global_average_pool(net)
-    logger.info(net)
-    net = tf.layers.dropout(net, training=is_training)
-    net, fov = conv_pass(net, [1], num_classes,
-                         padding=padding, name='conv_fc8',
-                         activation=None, fov=fov, voxel_size=voxel_size)
-    add_summaries(net, sums)
+        logger.info("%s", net)
+    else:
+        net, fov = conv_pass(
+            net, [1], fc_size,
+            activation=activation,
+            padding=padding,
+            is_training=is_training,
+            use_batchnorm=use_batchnorm,
+            name='conv_fc2',
+            fov=fov, voxel_size=voxel_size)
 
-    logger.info(net)
+        if dropout:
+            net = tf.layers.dropout(net, rate=dropout,training=is_training)
+            logger.info("%s", net)
+
+    net, fov = conv(net, num_classes, 1,
+                    activation=None, padding=padding,
+                    name='out',
+                    fov=fov, voxel_size=voxel_size)
+
     net = tf.reshape(net, shape=(tf.shape(net)[0], num_classes))
-    logger.info(net)
+    logger.info("%s", net)
 
     num_var_end = get_number_of_tf_variables()
-    var_added = num_var_end - num_var_conv
-    var_added_total = num_var_end - num_var_start
-    logger.info('number of variables added (fc part): %i, '
+    num_var_fc = num_var_end - num_var
+    num_var_total = num_var_end - num_var_start
+    logger.info('number of variables added (conv part): %i, '
+                'number of variables added (fc part): %i, '
                 'number of variables added (total): %i, '
-                'new total: %i', var_added, var_added_total, num_var_end)
+                'new total: %i',
+                num_var_conv, num_var_fc, num_var_total, num_var_end)
+    logger.info("final field of view: %s", fov)
+    logger.info("final voxel size: %s", voxel_size)
 
-    return net, sums
+    summaries = add_summaries()
+
+    return net, summaries
