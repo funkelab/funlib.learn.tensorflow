@@ -170,6 +170,9 @@ def conv4d(
     output = tf.stack(frame_results, axis=2)
 
     if activation:
-        output = activation(output)
+        if isinstance(activation, str):
+            output = tf.keras.activations.get(activation)(output)
+        else:
+            output = activation(output)
 
     return output
