@@ -24,6 +24,7 @@ def block_rn_v2(net, num_fmaps, num_fmaps_out,
                 use_bottleneck=True,
                 conv_shortcut=False,
                 make_iso=False,
+                merge_time_voxel_size=None,
                 name='block',
                 fov=(1, 1, 1),
                 voxel_size=(1, 1, 1)):
@@ -63,8 +64,25 @@ def block_rn_v2(net, num_fmaps, num_fmaps_out,
     shape = net.get_shape().as_list()
     num_fmaps_in = shape[1]
 
-    if make_iso and strides > 1 and shape[-3] * 2 <= shape[-1]:
-        strides = [strides] * (len(shape)-2)
+    if padding.lower() == 'same' and len(shape) == 6 and \
+       merge_time_voxel_size is not None and \
+       voxel_size[-1] >= merge_time_voxel_size:
+        net, fov = conv(
+            net, num_fmaps_in, [shape[2], 1, 1, 1],
+            activation=activation,
+            padding="valid",
+            strides=1,
+            name=name + '_remove_temp')
+        shape = net.get_shape().as_list()
+
+    if isinstance(strides, int):
+        strides = [strides]*(len(shape) - 2)
+
+    if make_iso and len(shape) > 4 and \
+       strides[-1] > 1 and shape[-3] * 2 <= shape[-1]:
+        strides[-3] = 1
+
+    if len(shape) == 6:
         strides[0] = 1
 
     if conv_shortcut:
@@ -116,6 +134,7 @@ def stack_rn_v2(net, num_fmaps, num_blocks,
                 is_first_block=False,
                 use_bottleneck=False,
                 make_iso=False,
+                merge_time_voxel_size=None,
                 name=None,
                 fov=(1, 1, 1),
                 voxel_size=(1, 1, 1)):
@@ -163,6 +182,7 @@ def stack_rn_v2(net, num_fmaps, num_blocks,
         is_first_block=is_first_block, use_bottleneck=use_bottleneck,
         conv_shortcut=True,
         make_iso=make_iso,
+        merge_time_voxel_size=merge_time_voxel_size,
         name=name + '_block1',
         fov=fov, voxel_size=voxel_size)
 
@@ -173,6 +193,7 @@ def stack_rn_v2(net, num_fmaps, num_blocks,
                 is_training=is_training, use_batchnorm=use_batchnorm,
                 use_bottleneck=use_bottleneck,
                 make_iso=make_iso,
+                merge_time_voxel_size=merge_time_voxel_size,
                 name=name + '_block' + str(i),
                 fov=fov, voxel_size=voxel_size)
 
@@ -184,6 +205,7 @@ def stack_rn_v2(net, num_fmaps, num_blocks,
         is_training=is_training, use_batchnorm=use_batchnorm,
         use_bottleneck=use_bottleneck,
         make_iso=make_iso,
+        merge_time_voxel_size=merge_time_voxel_size,
         name=name + '_block' + str(num_blocks),
         fov=fov, voxel_size=voxel_size)
 
@@ -197,6 +219,7 @@ def resnet(fmaps_in,
            activation='relu',
            padding='same',
            make_iso=False,
+           merge_time_voxel_size=None,
            is_training=None,
            use_batchnorm=False,
            use_conv4d=False,
@@ -208,50 +231,23 @@ def resnet(fmaps_in,
 
 
     def stack_fn(net, fov, voxel_size):
-        net, fov, voxel_size = stack_rn_v2(
-            net, 64, num_blocks[0],
-            activation=activation, padding=padding,
-            is_training=is_training,
-            use_batchnorm=use_batchnorm,
-            is_first_block=True,
-            use_bottleneck=use_bottleneck,
-            make_iso=make_iso,
-            name='stack1',
-            fov=fov, voxel_size=voxel_size)
+        num_fmaps = [64, 128, 256, 512]
+        for i, nb in enumerate(num_blocks):
+            is_first_block = i == 0
+            is_last_block = i == (len(num_blocks) - 1)
 
-        net, fov, voxel_size = stack_rn_v2(
-            net, 128, num_blocks[1],
-            activation=activation, padding=padding,
-            is_training=is_training,
-            use_batchnorm=use_batchnorm,
-            is_first_block=False,
-            use_bottleneck=use_bottleneck,
-            make_iso=make_iso,
-            name='stack2',
-            fov=fov, voxel_size=voxel_size)
-
-        net, fov, voxel_size = stack_rn_v2(
-            net, 256, num_blocks[2],
-            activation=activation, padding=padding,
-            is_training=is_training,
-            use_batchnorm=use_batchnorm,
-            is_first_block=False,
-            use_bottleneck=use_bottleneck,
-            make_iso=make_iso,
-            name='stack3',
-            fov=fov, voxel_size=voxel_size)
-
-        net, fov, voxel_size = stack_rn_v2(
-            net, 512, num_blocks[3],
-            stride1=1,
-            activation=activation, padding=padding,
-            is_training=is_training,
-            use_batchnorm=use_batchnorm,
-            is_first_block=False,
-            use_bottleneck=use_bottleneck,
-            make_iso=make_iso,
-            name='stack4',
-            fov=fov, voxel_size=voxel_size)
+            net, fov, voxel_size = stack_rn_v2(
+                net, num_fmaps[i], nb,
+                stride1=1 if is_last_block else 2,
+                activation=activation, padding=padding,
+                is_training=is_training,
+                use_batchnorm=use_batchnorm,
+                is_first_block=is_first_block,
+                use_bottleneck=use_bottleneck,
+                make_iso=make_iso,
+                merge_time_voxel_size=merge_time_voxel_size,
+                name='stack' + str(i+1),
+                fov=fov, voxel_size=voxel_size)
 
         return net, fov, voxel_size
 

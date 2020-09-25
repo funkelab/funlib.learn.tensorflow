@@ -22,6 +22,7 @@ def vgg(fmaps_in,
         activation='relu',
         padding='same',
         make_iso=False,
+        merge_time_voxel_size=None,
         is_training=None,
         use_batchnorm=False,
         use_conv4d=False,
@@ -119,6 +120,18 @@ def vgg(fmaps_in,
         logger.info("%s %s %s %s %s", net, kernel_size, num_fmaps,
                     downsample_factors[i],
                     fmap_inc_factors[i])
+        shape = net.get_shape().as_list()
+        num_fmaps_in = shape[1]
+        if padding.lower() == 'same' and len(shape) == 6 and \
+           merge_time_voxel_size is not None and \
+           voxel_size[-1] >= merge_time_voxel_size:
+            net, fov = conv(
+                net, num_fmaps_in, [3, 1, 1, 1],
+                activation=activation,
+                padding="valid",
+                strides=1,
+                name='conv_%i_remove_temp' % i)
+
         net, fov = conv_pass(net,
                              kernel_sizes=kernel_size,
                              num_fmaps=num_fmaps,
@@ -145,6 +158,7 @@ def vgg(fmaps_in,
             padding=padding,
             name='pool_%i' % i,
             voxel_size=voxel_size)
+        logger.info("current voxel size: %s", voxel_size)
 
     logger.info("%s", net)
     num_var = get_number_of_tf_variables()
