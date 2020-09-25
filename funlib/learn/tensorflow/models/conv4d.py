@@ -1,4 +1,4 @@
-# -*- coding: UTF-8 -*-
+# -*- coding: utf-8 -*-
 import tensorflow as tf
 
 
@@ -94,8 +94,8 @@ def conv4d(
         "Tensor of shape (b, c, l, d, h, w) expected")
     assert isinstance(kernel_size, int) or len(kernel_size) == 4, (
         "kernel size should be an integer or a 4D tuple, not %s" % kernel_size)
-    assert strides == (1, 1, 1, 1), (
-        "Strides other than 1 not yet implemented")
+    if isinstance(strides, int):
+        strides = (strides,)*4
     assert data_format == 'channels_first', (
         "Data format other than 'channels_first' not yet implemented")
     assert dilation_rate == (1, 1, 1, 1), (
@@ -127,7 +127,7 @@ def conv4d(
         # frame (or if the user indicated to have all variables reused)
         reuse_kernel = reuse
 
-        for j in range(l_i):
+        for j in range(0, l_i, strides[0]):
 
             # add results to this output frame
             out_frame = j - (i - l_k//2) - (l_i - l_o)//2
@@ -143,6 +143,7 @@ def conv4d(
                 data_format='channels_first',
                 activation=None,
                 use_bias=use_bias,
+                strides=strides[1:],
                 kernel_initializer=kernel_initializer,
                 bias_initializer=bias_initializer,
                 kernel_regularizer=kernel_regularizer,
