@@ -114,7 +114,7 @@ def conv4d(
         (l_k, d_k, h_k, w_k) = kernel_size
 
     # output size for 'valid' convolution
-    if padding == 'valid':
+    if padding.lower() == 'valid':
         l_o = l_i - l_k + 1
     else:
         l_o = l_i
