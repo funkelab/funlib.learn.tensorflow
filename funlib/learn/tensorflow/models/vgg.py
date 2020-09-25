@@ -174,7 +174,8 @@ def vgg(fmaps_in,
         fov=fov, voxel_size=voxel_size)
 
     if dropout:
-        net = tf.layers.dropout(net, rate=dropout,training=is_training)
+        net = tf.layers.dropout(net, rate=dropout,
+                                training=is_training)
         logger.info("%s", net)
 
     if global_pool:
@@ -191,7 +192,8 @@ def vgg(fmaps_in,
             fov=fov, voxel_size=voxel_size)
 
         if dropout:
-            net = tf.layers.dropout(net, rate=dropout,training=is_training)
+            net = tf.layers.dropout(net, rate=dropout,
+                                    training=is_training)
             logger.info("%s", net)
 
     net, fov = conv(net, num_classes, 1,
@@ -215,4 +217,5 @@ def vgg(fmaps_in,
 
     summaries = add_summaries()
 
+    net = tf.identity(net, name="logits")
     return net, summaries

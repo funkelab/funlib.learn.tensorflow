@@ -92,7 +92,7 @@ def block_rn_v2(net, num_fmaps, num_fmaps_out,
             padding=padding,
             strides=strides,
             name=name + '_conv_shortcut')
-        voxel_size = np.array(strides) * voxel_size
+        voxel_size = np.array(strides)[-len(voxel_size):] * voxel_size
     else:
         if np.any(np.array(strides) > 1):
             shortcut, voxel_size = downsample(
@@ -101,13 +101,14 @@ def block_rn_v2(net, num_fmaps, num_fmaps_out,
         else:
             shortcut = tf.identity(net, name=name + "plain_shortcut")
     logger.info("%s", shortcut)
+    logger.info("current voxel size: %s", voxel_size)
 
     if use_bottleneck:
         block_fn = bottleneck_res_block
     else:
         block_fn = basic_res_block
 
-    print(strides)
+    logger.info("used strides: %s", strides)
     net, fov = block_fn(net,
                         num_fmaps,
                         num_fmaps_out,
@@ -215,7 +216,9 @@ def stack_rn_v2(net, num_fmaps, num_blocks,
 def resnet(fmaps_in,
            *,  # this indicates that all following arguments are keyword arguments
            num_classes,
-           resnet_size='50',
+           resnet_size=None,
+           num_blocks=None,
+           use_bottleneck=None,
            activation='relu',
            padding='same',
            make_iso=False,
@@ -252,21 +255,25 @@ def resnet(fmaps_in,
         return net, fov, voxel_size
 
 
-    avail_resnet_sizes = ['18', '34', '50', '101']
-    assert resnet_size in avail_resnet_sizes, \
-        "unknown resnet size, choose one of: %s" % avail_resnet_sizes
-    if resnet_size == '18':
-        num_blocks = [2, 2,  2, 2]
-        use_bottleneck = False
-    elif resnet_size == '34':
-        num_blocks = [3, 4,  6, 4]
-        use_bottleneck = False
-    elif resnet_size == '50':
-        num_blocks = [3, 4,  6, 4]
-        use_bottleneck = True
-    elif resnet_size == '101':
-        num_blocks = [3, 4, 23, 4]
-        use_bottleneck = True
+    if resnet_size is not None:
+        avail_resnet_sizes = ['18', '34', '50', '101']
+        assert resnet_size in avail_resnet_sizes, \
+            "unknown resnet size, choose one of: %s" % avail_resnet_sizes
+        if resnet_size == '18':
+            num_blocks = [2, 2,  2, 2]
+            use_bottleneck = False
+        elif resnet_size == '34':
+            num_blocks = [3, 4,  6, 4]
+            use_bottleneck = False
+        elif resnet_size == '50':
+            num_blocks = [3, 4,  6, 4]
+            use_bottleneck = True
+        elif resnet_size == '101':
+            num_blocks = [3, 4, 23, 4]
+            use_bottleneck = True
+    else:
+        assert num_blocks is not None and use_bottleneck is not None, \
+            "set either resnet_size or num_blocks and use_bottleneck!"
 
     fov = (1, 1, 1)
     voxel_size = np.array(voxel_size[-3:])
@@ -274,9 +281,13 @@ def resnet(fmaps_in,
 
     if use_conv4d:
         net = tf.expand_dims(net, 1)
-
+        shape = net.get_shape().as_list()
+        first_kernel_size = [min(shape[2], 7), 7, 7, 7]
+    else:
+        first_kernel_size = 7
+    print("kernel first conv:", first_kernel_size)
     # x = layers.ZeroPadding2D(padding=((3, 3), (3, 3)), name='conv1_pad')(img_input)
-    net, fov = conv(net, 64, 7,
+    net, fov = conv(net, 64, first_kernel_size,
                     activation=activation,
                     padding=padding,
                     # strides=2,
@@ -337,4 +348,5 @@ def resnet(fmaps_in,
 
     summaries = add_summaries()
 
+    net = tf.identity(net, name="logits")
     return net, summaries
