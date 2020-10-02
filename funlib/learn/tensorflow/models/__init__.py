@@ -5,3 +5,4 @@ from .layers import (conv, conv_pass,
                      repeat,
                      upsample)
 from .utils import crop
+from .resnet import resnet # noqa
