@@ -32,6 +32,19 @@ def get_number_of_tf_variables():
     return total_parameters
 
 
+def global_average_pool(net):
+    shape = net.get_shape().as_list()
+    if len(shape) == 5:
+        dims = [2, 3, 4]
+    elif len(shape) == 4:
+        dims = [2, 3]
+    else:
+        raise RuntimeError(
+            "invalid number of dimensions for global_average_pool")
+    return tf.reduce_mean(net, dims, keep_dims=True,
+                          name='global_avg_pool')
+
+
 def crop(a, shape):
     '''Crop a to a new shape, centered in a.
 
