@@ -117,8 +117,7 @@ def conv(fmaps_in,
     if len(out_shape) == 6:
         length = out_shape[2]
         if length == 1:
-            out_shape = out_shape[0:2] + out_shape[3:]
-            fmaps = tf.reshape(fmaps, out_shape)
+            fmaps = tf.squeeze(fmaps, axis=2)
 
     return fmaps, fov
 
@@ -231,16 +230,6 @@ def downsample(
         padding='valid',
         name='down',
         voxel_size=(1, 1, 1)):
-    if isinstance(factors, int):
-        factors = len(voxel_size)*[factors]
-
-    if strides is None:
-        strides = factors
-    else:
-        if isinstance(strides, int):
-            strides = len(voxel_size)*[strides]
-
-    voxel_size = tuple(vs*st for vs, st in zip(voxel_size, strides))
     in_shape = fmaps_in.get_shape().as_list()
 
     # Explicitly handle number of dimensions
@@ -248,20 +237,34 @@ def downsample(
     if len(in_shape) == 4:
         # 2d
         pool_op = tf.layers.max_pooling2d
+        num_dims = 2
     else:
         # 3d, 4d
         pool_op = tf.layers.max_pooling3d
+        num_dims = 3
 
     if is_4d:
         orig_in_shape = in_shape
         # store time dimension in channels
         fmaps_in = tf.reshape(fmaps_in, (
-            in_shape[0],
+            in_shape[0] if in_shape[0] is not None else -1,
             in_shape[1]*in_shape[2],
             in_shape[3],
             in_shape[4],
             in_shape[5]))
         in_shape = fmaps_in.get_shape().as_list()
+
+    if isinstance(factors, int):
+        factors = (len(in_shape)-2)*[factors]
+
+    if strides is None:
+        strides = factors
+    else:
+        if isinstance(strides, int):
+            strides = (len(in_shape)-2)*[strides]
+
+    voxel_size = tuple(vs*st for vs, st in
+                       zip(voxel_size, strides[-len(voxel_size):]))
 
     if not np.all(np.array(in_shape[2:]) % np.array(factors) == 0):
         raise RuntimeWarning(
@@ -270,8 +273,8 @@ def downsample(
 
     fmaps = pool_op(
         fmaps_in,
-        pool_size=factors,
-        strides=strides,
+        pool_size=factors[-num_dims:],
+        strides=strides[-num_dims:],
         padding=padding,
         data_format='channels_first',
         name=name,
@@ -282,7 +285,7 @@ def downsample(
 
         # restore time dimension
         fmaps = tf.reshape(fmaps, (
-            orig_in_shape[0],
+            orig_in_shape[0] if orig_in_shape[0] is not None else -1,
             orig_in_shape[1],
             orig_in_shape[2],
             out_shape[2],
@@ -397,10 +400,15 @@ def upsample(
         transp_layer = tf.layers.conv3d_transpose
         resize_op = tf.keras.backend.resize_volumes
 
-    voxel_size = tuple(vs/fac for vs, fac in zip(voxel_size, factors))
+    in_shape = tuple(fmaps_in.get_shape().as_list())
+    if isinstance(factors, int):
+        factors = (len(in_shape)-2)*[factors]
+
+    voxel_size = tuple(vs/fac for vs, fac
+                       in zip(voxel_size, factors[-len(voxel_size):]))
+
     if upsampling == "uniform_transposed_conv":
 
-        in_shape = tuple(fmaps_in.get_shape().as_list())
         num_fmaps_in = in_shape[1]
         num_fmaps_out = num_fmaps
         out_shape = (
