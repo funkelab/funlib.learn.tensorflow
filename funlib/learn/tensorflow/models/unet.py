@@ -1,4 +1,5 @@
 from .conv4d import conv4d
+from .utils import get_number_of_tf_variables
 import math
 import numpy as np
 import tensorflow as tf
@@ -11,7 +12,8 @@ def conv_pass(
         activation='relu',
         name='conv_pass',
         fov=(1, 1, 1),
-        voxel_size=(1, 1, 1)):
+        voxel_size=(1, 1, 1),
+        padding='valid'):
     '''Create a convolution pass::
 
         f_in --> f_1 --> ... --> f_n
@@ -54,6 +56,10 @@ def conv_pass(
 
             Size of a voxel in the input data, in physical units.
 
+        padding:
+
+            'valid' or 'same', controls the padding on the convolution
+
     Returns:
 
         (fmaps, fov):
@@ -93,7 +99,7 @@ def conv_pass(
             inputs=fmaps,
             filters=num_fmaps,
             kernel_size=kernel_size,
-            padding='valid',
+            padding=padding,
             data_format='channels_first',
             activation=activation,
             name=name + '_%i' % i)
@@ -488,19 +494,6 @@ def crop_to_factor(fmaps_in, factor, kernel_sizes):
         fmaps = fmaps_in
 
     return fmaps
-
-
-def get_number_of_tf_variables():
-    '''Returns number of trainable variables in tensorflow graph collection'''
-    total_parameters = 0
-    for variable in tf.trainable_variables():
-        # shape is an array of tf.Dimension
-        shape = variable.get_shape()
-        variable_parameters = 1
-        for dim in shape:
-            variable_parameters *= dim.value
-        total_parameters += variable_parameters
-    return total_parameters
 
 
 def unet(
