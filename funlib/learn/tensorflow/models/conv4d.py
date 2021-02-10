@@ -1,4 +1,4 @@
-# -*- coding: UTF-8 -*-
+# -*- coding: utf-8 -*-
 import tensorflow as tf
 
 
@@ -94,10 +94,14 @@ def conv4d(
         "Tensor of shape (b, c, l, d, h, w) expected")
     assert isinstance(kernel_size, int) or len(kernel_size) == 4, (
         "kernel size should be an integer or a 4D tuple, not %s" % kernel_size)
+    if isinstance(strides, int):
+        strides = (strides,)*4
     assert strides == (1, 1, 1, 1), (
         "Strides other than 1 not yet implemented")
     assert data_format == 'channels_first', (
         "Data format other than 'channels_first' not yet implemented")
+    if isinstance(dilation_rate, int):
+        dilation_rate = (dilation_rate,)*4
     assert dilation_rate == (1, 1, 1, 1), (
         "Dilation rate other than 1 not yet implemented")
 
@@ -112,10 +116,13 @@ def conv4d(
         (l_k, d_k, h_k, w_k) = kernel_size
 
     # output size for 'valid' convolution
-    if padding == 'valid':
+    if padding.lower() == 'valid':
         l_o = l_i - l_k + 1
     else:
         l_o = l_i
+
+    if b is None:
+        b = -1
 
     # output tensors for each 3D frame
     frame_results = [None]*l_o
@@ -163,6 +170,9 @@ def conv4d(
     output = tf.stack(frame_results, axis=2)
 
     if activation:
-        output = activation(output)
+        if isinstance(activation, str):
+            output = tf.keras.activations.get(activation)(output)
+        else:
+            output = activation(output)
 
     return output
