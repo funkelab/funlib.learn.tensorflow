@@ -40,6 +40,12 @@ setup(
             'funlib.learn.tensorflow.losses',
             'funlib.learn.tensorflow.losses.impl',
         ],
+        install_requires=[
+            'cython',
+            'numpy',
+            'tensorflow',
+            'mlpack3'
+        ],
         ext_modules=cythonize([
             Extension(
                 'funlib.learn.tensorflow.losses.impl.wrappers',
